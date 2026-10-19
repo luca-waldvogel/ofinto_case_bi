@@ -1,5 +1,6 @@
 from datetime import date
 from decimal import Decimal
+from pathlib import Path
 
 import duckdb
 import pytest
@@ -8,7 +9,11 @@ from ofinto_case_bi.import_csv import import_data
 from ofinto_case_bi.schemas import SCHEMAS
 
 
+TEST_DATA = Path(__file__).parent / "test_data"
+
+
 def read_tables(database):
+    """Alle Tabellen für den Vergleich vor und nach dem Import lesen."""
     with duckdb.connect(str(database), read_only=True) as connection:
         return {
             table: connection.execute(f'SELECT * FROM "{table}"').fetchall()
@@ -16,41 +21,49 @@ def read_tables(database):
         }
 
 
-def test_import_preserves_types_and_replaces_existing_data(csv_dir):
-    database = csv_dir / "case.duckdb"
-    assert import_data(csv_dir, database) == dict.fromkeys(SCHEMAS, 1)
-    tables = read_tables(database)
-    customer = tables["firmenkunden"][0]
-    assert customer[3] == "0123"
-    assert customer[7] is None
-    assert customer[-1] == date(2026, 1, 2)
-    assert tables["bestellungen"][0][5] == Decimal("123.45")
-    assert tables["firmendaten_anreicherung"][0][8] == "01.10"
+def test_import_returns_expected_data(tmp_path):
+    database = tmp_path / "case.duckdb"
 
-    source = csv_dir / "firmenkunden.csv"
-    source.write_text(source.read_text(encoding="utf-8").replace("Beispiel AG", "Neue AG"), encoding="utf-8")
-    assert import_data(csv_dir, database) == dict.fromkeys(SCHEMAS, 1)
-    assert read_tables(database)["firmenkunden"][0][1] == "Neue AG"
+    counts = import_data(TEST_DATA / "valid", database)
+
+    assert counts == {
+        "firmenkunden": 1,
+        "firmendaten_anreicherung": 1,
+        "bestellungen": 1,
+        "bestellpositionen": 1,
+    }, "Jede Tabelle muss genau eine Zeile enthalten"
+
+    # Vollständige Zeilen prüfen, einschließlich Datentypen und leerer Felder.
+    assert read_tables(database) == {
+        "firmenkunden": [
+            ("A-1", "Beispiel AG", "Zürich", "0123", "CH", "Deutschschweiz",
+             "de", None, "Anna", "Webshop", date(2026, 1, 2)),
+        ],
+        "firmendaten_anreicherung": [
+            ("A-1", "Beispiel AG", "Zürich", "CHE-123", 0.95, 100,
+             "Standort", 1, "01.10", 2000, date(2026, 1, 1)),
+        ],
+        "bestellungen": [
+            ("O-1", "A-1", date(2026, 1, 2), "ofinto.ch", "CHF",
+             Decimal("123.45"), "abgeschlossen", Decimal("0.00"), "Webshop"),
+        ],
+        "bestellpositionen": [
+            ("O-1", "Elevate", "Tisch", 1, Decimal("123.45"), "CHF"),
+        ],
+    }, "Die importierten Daten müssen den erwarteten Werten entsprechen"
 
 
-@pytest.mark.parametrize("invalid_input", ["header", "quantity", "columns"])
-def test_failed_import_preserves_all_existing_tables(csv_dir, invalid_input):
-    database = csv_dir / "case.duckdb"
-    import_data(csv_dir, database)
+def test_failed_import_rolls_back_all_changes(tmp_path):
+    database = tmp_path / "case.duckdb"
+    import_data(TEST_DATA / "valid", database)
     before = read_tables(database)
 
-    source = csv_dir / "firmenkunden.csv"
-    source.write_text(source.read_text(encoding="utf-8").replace("Beispiel AG", "Neue AG"), encoding="utf-8")
-    source = csv_dir / "bestellpositionen.csv"
-    text = source.read_text(encoding="utf-8")
-    if invalid_input == "header":
-        text = text.replace("order_id", "wrong_column", 1)
-    elif invalid_input == "quantity":
-        text = text.replace(",1,123.45,", ",invalid,123.45,")
-    else:
-        text = text.replace(",1,123.45,CHF", ",1,123.45")
-    source.write_text(text, encoding="utf-8")
+    # Der zweite Datensatz ändert zuerst den Firmennamen auf „Neue AG“.
+    # Erst die letzte Tabelle scheitert an der ungültigen Menge „ungueltig“.
+    with pytest.raises(duckdb.Error):
+        import_data(TEST_DATA / "invalid", database)
 
-    with pytest.raises((duckdb.Error, ValueError)):
-        import_data(csv_dir, database)
-    assert read_tables(database) == before
+    # Auch die bereits importierte Namensänderung muss zurückgerollt werden.
+    assert read_tables(database) == before, (
+        "Nach dem Fehler müssen alle Tabellen unverändert sein"
+    )

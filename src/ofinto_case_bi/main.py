@@ -8,7 +8,7 @@ import typer
 from ofinto_case_bi.import_csv import import_data
 
 
-app = typer.Typer(no_args_is_help=True, pretty_exceptions_show_locals=False)
+app = typer.Typer(no_args_is_help=True)
 
 
 @app.callback()
