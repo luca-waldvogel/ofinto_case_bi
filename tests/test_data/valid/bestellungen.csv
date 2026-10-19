@@ -1,0 +1,2 @@
+order_id,account_id,bestelldatum,shop,waehrung,bestellwert_netto,status,retourenwert,kanal
+O-1,A-1,2026-01-02,ofinto.ch,CHF,123.45,abgeschlossen,0.0,Webshop
