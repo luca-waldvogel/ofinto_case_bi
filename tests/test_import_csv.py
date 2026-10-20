@@ -5,8 +5,14 @@ from pathlib import Path
 import duckdb
 import pytest
 
-from ofinto_case_bi.import_csv import import_data
-from ofinto_case_bi.schemas import SCHEMAS
+from ofinto.import_csv import import_data
+from ofinto.model import (
+    CLIENTS_TABLE,
+    ENRICHMENT_TABLE,
+    ORDER_ITEMS_TABLE,
+    ORDERS_TABLE,
+    SCHEMAS,
+)
 
 
 TEST_DATA = Path(__file__).parent / "test_data"
@@ -27,27 +33,27 @@ def test_import_returns_expected_data(tmp_path):
     counts = import_data(TEST_DATA / "valid", database)
 
     assert counts == {
-        "firmenkunden": 1,
-        "firmendaten_anreicherung": 1,
-        "bestellungen": 1,
-        "bestellpositionen": 1,
+        CLIENTS_TABLE: 1,
+        ENRICHMENT_TABLE: 1,
+        ORDERS_TABLE: 1,
+        ORDER_ITEMS_TABLE: 1,
     }, "Jede Tabelle muss genau eine Zeile enthalten"
 
     # Vollständige Zeilen prüfen, einschließlich Datentypen und leerer Felder.
     assert read_tables(database) == {
-        "firmenkunden": [
+        CLIENTS_TABLE: [
             ("A-1", "Beispiel AG", "Zürich", "0123", "CH", "Deutschschweiz",
              "de", None, "Anna", "Webshop", date(2026, 1, 2)),
         ],
-        "firmendaten_anreicherung": [
+        ENRICHMENT_TABLE: [
             ("A-1", "Beispiel AG", "Zürich", "CHE-123", 0.95, 100,
              "Standort", 1, "01.10", 2000, date(2026, 1, 1)),
         ],
-        "bestellungen": [
+        ORDERS_TABLE: [
             ("O-1", "A-1", date(2026, 1, 2), "ofinto.ch", "CHF",
              Decimal("123.45"), "abgeschlossen", Decimal("0.00"), "Webshop"),
         ],
-        "bestellpositionen": [
+        ORDER_ITEMS_TABLE: [
             ("O-1", "Elevate", "Tisch", 1, Decimal("123.45"), "CHF"),
         ],
     }, "Die importierten Daten müssen den erwarteten Werten entsprechen"

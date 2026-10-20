@@ -1,7 +1,12 @@
-"""Column names and DuckDB types for the four source CSV tables."""
+CLIENTS_TABLE = "firmenkunden"
+ENRICHMENT_TABLE = "firmendaten_anreicherung"
+ORDERS_TABLE = "bestellungen"
+ORDER_ITEMS_TABLE = "bestellpositionen"
+COMPANY_PROFILES_TABLE = "company_profiles"
+
 
 SCHEMAS = {
-    "firmenkunden": {
+    CLIENTS_TABLE: {
         "account_id": "VARCHAR",
         "firmenname": "VARCHAR",
         "ort": "VARCHAR",
@@ -14,7 +19,7 @@ SCHEMAS = {
         "erstkontakt": "VARCHAR",
         "erste_bestellung": "DATE",
     },
-    "firmendaten_anreicherung": {
+    ENRICHMENT_TABLE: {
         "account_id": "VARCHAR",
         "gefundener_name": "VARCHAR",
         "ort_register": "VARCHAR",
@@ -27,7 +32,7 @@ SCHEMAS = {
         "gruendungsjahr": "INTEGER",
         "stand": "DATE",
     },
-    "bestellungen": {
+    ORDERS_TABLE: {
         "order_id": "VARCHAR",
         "account_id": "VARCHAR",
         "bestelldatum": "DATE",
@@ -38,7 +43,7 @@ SCHEMAS = {
         "retourenwert": "DECIMAL(18,2)",
         "kanal": "VARCHAR",
     },
-    "bestellpositionen": {
+    ORDER_ITEMS_TABLE: {
         "order_id": "VARCHAR",
         "produkt": "VARCHAR",
         "kategorie": "VARCHAR",

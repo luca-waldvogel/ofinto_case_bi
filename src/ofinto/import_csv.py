@@ -3,7 +3,7 @@ from pathlib import Path
 
 import duckdb
 
-from ofinto_case_bi.schemas import SCHEMAS
+from .model import SCHEMAS
 
 
 def validate_csv_header(source: Path, columns: dict[str, str]) -> None:
