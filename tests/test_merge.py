@@ -2,6 +2,7 @@ from datetime import date
 from pathlib import Path
 
 import duckdb
+import pytest
 
 from ofinto.import_csv import import_data
 from ofinto.merge import merge_data
@@ -44,7 +45,8 @@ def test_employee_basis_and_missing_enrichment(tmp_path):
             SELECT c.* REPLACE (id AS account_id) FROM firmenkunden c
             CROSS JOIN (VALUES ('A-2'), ('A-3'), ('A-4')) AS accounts(id);
             INSERT INTO firmendaten_anreicherung
-            SELECT * REPLACE ('A-2' AS account_id, 'Konzern' AS mitarbeitende_bezug)
+            SELECT * REPLACE ('A-2' AS account_id, 'Konzern' AS mitarbeitende_bezug,
+                0.5 AS match_score)
             FROM firmendaten_anreicherung WHERE account_id = 'A-1';
             INSERT INTO firmendaten_anreicherung
             SELECT * REPLACE ('A-4' AS account_id, DATE '2020-01-01' AS stand)
@@ -55,7 +57,8 @@ def test_employee_basis_and_missing_enrichment(tmp_path):
         """)
     companies = {company['account_id']: company for company in merge_data(database)}
     assert len(companies) == 4
-    assert companies['A-1']['mitarbeiterbasis'] == 'verwendbar'  # Zuordnung nur über account_id.
+    assert companies['A-1']['mitarbeiterbasis'] == 'eingeschränkt'
+    assert 'Match-Score unter 0.85' in companies['A-1']['hinweise']
     assert companies['A-2']['mitarbeiterbasis'] == 'nicht verwendbar'
     assert 'Konzern' in companies['A-2']['hinweise']
     assert companies['A-3']['mitarbeiterbasis'] == 'nicht verwendbar'
@@ -64,3 +67,18 @@ def test_employee_basis_and_missing_enrichment(tmp_path):
     assert companies['A-4']['mitarbeitende'] == 100  # Quellenwerte bleiben erhalten.
     with duckdb.connect(str(database), read_only=True) as connection:
         assert connection.execute('SELECT count(*) FROM company_profiles').fetchone()[0] == 4
+
+
+@pytest.mark.parametrize('score, expected', [
+    (0.8499, 'eingeschränkt'),
+    (0.85, 'verwendbar'),
+    (0.95, 'verwendbar'),
+])
+def test_match_score_threshold(tmp_path, score, expected):
+    database = tmp_path / 'case.duckdb'
+    import_data(TEST_DATA, database)
+    with duckdb.connect(str(database)) as connection:
+        connection.execute('UPDATE firmendaten_anreicherung SET match_score = ?', [score])
+    company, = merge_data(database)
+    assert company['mitarbeiterbasis'] == expected
+    assert ('Unsichere Firmenzuordnung: Match-Score unter 0.85' in company['hinweise']) == (score < 0.85)

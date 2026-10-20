@@ -21,7 +21,8 @@ Datenstand 14. Oktober 2026, änderbar mit `--as-of YYYY-MM-DD`.
 
 1. Firmenstamm und Anreicherung über `account_id` verbinden. Alle Firmen bleiben
    enthalten, auch ohne Anreicherung oder Bestellungen. Die bestehende Zuordnung
-   wird übernommen; Name, Ort und Match-Score werden nicht zusätzlich geprüft.
+   wird übernommen; ein Match-Score unter 0.85 schränkt die Mitarbeiterbasis ein.
+   Name und Ort werden nicht zusätzlich geprüft.
 2. Bestellungen und Tisch-/Bürostuhlmengen je Firma aggregieren. Nur abgeschlossene
    Bestellungen und Teilretouren bis zum Stichtag zählen. Bestellungen werden
    getrennt von Positionen gezählt, um Doppelzählungen zu vermeiden.
@@ -49,7 +50,11 @@ Anzahl ausgestatteter Arbeitsplätze.
 
 Die Mitarbeiterbasis ist **nicht verwendbar**, wenn eine positive Mitarbeiterzahl
 fehlt oder ihr Bezug nicht eindeutig `Standort` ist. Bei fehlendem Datum, einem
-Datum nach dem Stichtag oder Daten über zwei Jahre alt ist sie **eingeschränkt**.
+Datum nach dem Stichtag, Daten über zwei Jahre alt oder einem Match-Score unter
+0.85 ist sie **eingeschränkt**. Genau 0.85 führt zu keiner Einschränkung.
+Die Score-Schwelle ist eine vorläufige Annahme für den Case und nicht anhand
+manuell bestätigter Zuordnungen kalibriert. Ein fehlender Score wird bisher nicht
+gesondert bewertet.
 Sonst ist sie **verwendbar**. Diese einfachen Regeln sind Annahmen für den Case,
 keine Garantie für korrekte Daten. Teilretouren ändern die Mitarbeiterbewertung nicht.
 
@@ -57,5 +62,5 @@ Die Umsetzung setzt eindeutige Konto-/Bestell-IDs und gültige Mengen aus dem
 Import voraus. Detaillierte Bestellprüfungen, Umsatzanalysen, separate Befundtabellen
 und Potenzialschätzungen sind nicht Teil dieses Schritts.
 
-Vier Tests prüfen den bestehenden Import sowie die beiden wesentlichen Fälle:
-korrekte Aggregation mit Retouren und die einfache Einordnung der Mitarbeiterbasis.
+Tests prüfen den bestehenden Import, die korrekte Aggregation mit Retouren und
+die Einordnung der Mitarbeiterbasis einschließlich der Match-Score-Grenze.
