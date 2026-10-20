@@ -1,15 +1,12 @@
-from enum import StrEnum
-
-
-class Tables(StrEnum):
-    CLIENTS = "firmenkunden"
-    ENRICHEMENT = "firmendaten_anreicherung"
-    ORDERS = "bestellungen"
-    ORDER_ITEMS = "bestellpositionen"
+CLIENTS_TABLE = "firmenkunden"
+ENRICHMENT_TABLE = "firmendaten_anreicherung"
+ORDERS_TABLE = "bestellungen"
+ORDER_ITEMS_TABLE = "bestellpositionen"
+COMPANY_PROFILES_TABLE = "company_profiles"
 
 
 SCHEMAS = {
-    Tables.CLIENTS: {
+    CLIENTS_TABLE: {
         "account_id": "VARCHAR",
         "firmenname": "VARCHAR",
         "ort": "VARCHAR",
@@ -22,7 +19,7 @@ SCHEMAS = {
         "erstkontakt": "VARCHAR",
         "erste_bestellung": "DATE",
     },
-    Tables.ENRICHEMENT: {
+    ENRICHMENT_TABLE: {
         "account_id": "VARCHAR",
         "gefundener_name": "VARCHAR",
         "ort_register": "VARCHAR",
@@ -35,7 +32,7 @@ SCHEMAS = {
         "gruendungsjahr": "INTEGER",
         "stand": "DATE",
     },
-    Tables.ORDERS: {
+    ORDERS_TABLE: {
         "order_id": "VARCHAR",
         "account_id": "VARCHAR",
         "bestelldatum": "DATE",
@@ -46,7 +43,7 @@ SCHEMAS = {
         "retourenwert": "DECIMAL(18,2)",
         "kanal": "VARCHAR",
     },
-    Tables.ORDER_ITEMS: {
+    ORDER_ITEMS_TABLE: {
         "order_id": "VARCHAR",
         "produkt": "VARCHAR",
         "kategorie": "VARCHAR",

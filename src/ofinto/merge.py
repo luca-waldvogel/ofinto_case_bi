@@ -3,6 +3,14 @@ from pathlib import Path
 
 import duckdb
 
+from .model import (
+    CLIENTS_TABLE,
+    COMPANY_PROFILES_TABLE,
+    ENRICHMENT_TABLE,
+    ORDER_ITEMS_TABLE,
+    ORDERS_TABLE,
+)
+
 DEFAULT_AS_OF = date(2026, 10, 14)
 
 
@@ -16,10 +24,10 @@ def merge_data(database: Path, as_of: date = DEFAULT_AS_OF) -> list[dict]:
         raise ValueError(f'Datenbank fehlt: {database}. Zuerst importieren.')
 
     with duckdb.connect(str(database)) as connection:
-        connection.execute("""
-            CREATE OR REPLACE TABLE company_profiles AS
+        connection.execute(f"""
+            CREATE OR REPLACE TABLE "{COMPANY_PROFILES_TABLE}" AS
             WITH active_orders AS (
-                SELECT * FROM bestellungen
+                SELECT * FROM "{ORDERS_TABLE}"
                 WHERE status IN ('abgeschlossen', 'teilretoure') AND bestelldatum <= ?
             ), order_totals AS (
                 SELECT account_id, count(*) AS anzahl_bestellungen,
@@ -40,7 +48,7 @@ def merge_data(database: Path, as_of: date = DEFAULT_AS_OF) -> list[dict]:
                     coalesce(sum(i.menge) FILTER (
                         WHERE i.produkt IN ('Motion', 'Era')
                     ), 0) AS buerostuehle_max
-                FROM active_orders o JOIN bestellpositionen i USING (order_id)
+                FROM active_orders o JOIN "{ORDER_ITEMS_TABLE}" i USING (order_id)
                 GROUP BY o.account_id
             ), companies AS (
                 SELECT c.*, e.* EXCLUDE (account_id),
@@ -50,8 +58,8 @@ def merge_data(database: Path, as_of: date = DEFAULT_AS_OF) -> list[dict]:
                     coalesce(i.tische_max, 0) AS tische_max,
                     coalesce(i.buerostuehle_min, 0) AS buerostuehle_min,
                     coalesce(i.buerostuehle_max, 0) AS buerostuehle_max
-                FROM firmenkunden c
-                LEFT JOIN firmendaten_anreicherung e USING (account_id)
+                FROM "{CLIENTS_TABLE}" c
+                LEFT JOIN "{ENRICHMENT_TABLE}" e USING (account_id)
                 LEFT JOIN order_totals o USING (account_id)
                 LEFT JOIN item_totals i USING (account_id)
             )
@@ -83,6 +91,6 @@ def merge_data(database: Path, as_of: date = DEFAULT_AS_OF) -> list[dict]:
                 ) AS hinweise
             FROM companies CROSS JOIN (SELECT ?::DATE AS stichtag)
         """, [as_of, as_of])
-        result = connection.execute('SELECT * FROM company_profiles ORDER BY account_id')
+        result = connection.execute(f'SELECT * FROM "{COMPANY_PROFILES_TABLE}" ORDER BY account_id')
         columns = [column[0] for column in result.description]
         return [dict(zip(columns, row)) for row in result.fetchall()]

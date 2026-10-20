@@ -20,8 +20,7 @@ def import_data(data_dir: Path, database: Path) -> dict[str, int]:
     with duckdb.connect(str(database)) as connection:
         connection.execute("BEGIN TRANSACTION")
         try:
-            for table_enum, columns in SCHEMAS.items():
-                table = table_enum.value
+            for table, columns in SCHEMAS.items():
                 source = data_dir / f"{table}.csv"
                 validate_csv_header(source, columns)
                 connection.execute(

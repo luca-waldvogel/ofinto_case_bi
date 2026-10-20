@@ -1,2 +1,8 @@
-from .schemas import SCHEMAS as SCHEMAS
-from .schemas import Tables as Tables
+from .schemas import (
+    CLIENTS_TABLE as CLIENTS_TABLE,
+    COMPANY_PROFILES_TABLE as COMPANY_PROFILES_TABLE,
+    ENRICHMENT_TABLE as ENRICHMENT_TABLE,
+    ORDER_ITEMS_TABLE as ORDER_ITEMS_TABLE,
+    ORDERS_TABLE as ORDERS_TABLE,
+    SCHEMAS as SCHEMAS,
+)

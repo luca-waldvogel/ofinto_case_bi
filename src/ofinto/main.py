@@ -69,7 +69,7 @@ def aggregate(
         typer.echo(f"  {quality}: {count}")
     for company in companies:
         if company['hinweise']:
-            typer.echo(f"  {company['account_id']} | {company['firmenname']} | {company['hinweise']}")
+            typer.echo(f"  {company['account_id']} | {company['firmenname']} | {company['mitarbeiterbasis']} | {company['hinweise']}")
 
 
 if __name__ == "__main__":
