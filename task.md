@@ -1,4 +1,5 @@
 Ausgangslage: Rund die Hälfte unseres Umsatzes aus Schweiz, Deutschland, Österreich und Frankreich kommt von Firmenkunden. Wir wollen wissen, wo noch Potenzial liegt, was in den Verkaufsgesprächen passiert, und das Team soll diesen Daten direkt Fragen stellen können. Im Anhang findest Du einen erfundenen, aber realistisch unsauberen Datensatz: 150 Firmenkunden mit Bestellungen, angereicherte Firmendaten und 20 Transkripte von Verkaufsgesprächen auf Deutsch und Französisch. Die Anreicherung stimmt nicht immer. Das README erklärt die Dateien.
+
 Kundendaten verlassen bei uns grundsätzlich das Haus nicht, wir betreiben dafür eigene Hardware mit lokalen Modellen. Weil die Daten im Case erfunden sind, darfst Du für die Umsetzung auch ein API-Modell verwenden, API-Kosten bis CHF 20 übernehmen wir. Zeig uns aber, welche Schritte im echten Betrieb lokal laufen müssten und welche nicht.
 
 Teil 1: Potenzial und Gespräche (ca. 4 h)
@@ -8,4 +9,5 @@ b) Zieh aus den Transkripten strukturierte Signale: Kaufzeitpunkt, Anzahl Arbeit
 
 Teil 2: Frag die B2B-Daten (ca. 2 h)
 Bau auf Deinen Ergebnissen einen einfachen Assistenten, der Fragen zu diesen Daten beantwortet. Wie Du ihn baust, ist Dir überlassen. Im Anhang sind acht Testfragen. Zeig uns pro Frage die Antwort, worauf sie beruht, und ob Du sie für richtig hältst.
+
 Zum Schluss eine halbe Seite: Was würde bei uns lokal laufen und was per API, und woran merken wir, wenn etwas falsch liegt? Wie automatisieren wir diese Prozesse aus dem Case?

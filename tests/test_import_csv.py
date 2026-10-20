@@ -5,8 +5,8 @@ from pathlib import Path
 import duckdb
 import pytest
 
-from ofinto_case_bi.import_csv import import_data
-from ofinto_case_bi.schemas import SCHEMAS
+from ofinto.import_csv import import_data
+from ofinto.model.schemas import SCHEMAS
 
 
 TEST_DATA = Path(__file__).parent / "test_data"

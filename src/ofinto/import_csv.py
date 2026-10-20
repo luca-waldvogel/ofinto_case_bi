@@ -3,7 +3,7 @@ from pathlib import Path
 
 import duckdb
 
-from ofinto_case_bi.schemas import SCHEMAS
+from .model.schemas import SCHEMAS
 
 
 def validate_csv_header(source: Path, columns: dict[str, str]) -> None:
@@ -20,7 +20,8 @@ def import_data(data_dir: Path, database: Path) -> dict[str, int]:
     with duckdb.connect(str(database)) as connection:
         connection.execute("BEGIN TRANSACTION")
         try:
-            for table, columns in SCHEMAS.items():
+            for table_enum, columns in SCHEMAS.items():
+                table = table_enum.value
                 source = data_dir / f"{table}.csv"
                 validate_csv_header(source, columns)
                 connection.execute(

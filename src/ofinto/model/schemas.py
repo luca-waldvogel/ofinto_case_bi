@@ -1,7 +1,15 @@
-"""Column names and DuckDB types for the four source CSV tables."""
+from enum import StrEnum
+
+
+class Tables(StrEnum):
+    CLIENTS = "firmenkunden"
+    ENRICHEMENT = "firmendaten_anreicherung"
+    ORDERS = "bestellungen"
+    ORDER_ITEMS = "bestellpositionen"
+
 
 SCHEMAS = {
-    "firmenkunden": {
+    Tables.CLIENTS: {
         "account_id": "VARCHAR",
         "firmenname": "VARCHAR",
         "ort": "VARCHAR",
@@ -14,7 +22,7 @@ SCHEMAS = {
         "erstkontakt": "VARCHAR",
         "erste_bestellung": "DATE",
     },
-    "firmendaten_anreicherung": {
+    Tables.ENRICHEMENT: {
         "account_id": "VARCHAR",
         "gefundener_name": "VARCHAR",
         "ort_register": "VARCHAR",
@@ -27,7 +35,7 @@ SCHEMAS = {
         "gruendungsjahr": "INTEGER",
         "stand": "DATE",
     },
-    "bestellungen": {
+    Tables.ORDERS: {
         "order_id": "VARCHAR",
         "account_id": "VARCHAR",
         "bestelldatum": "DATE",
@@ -38,7 +46,7 @@ SCHEMAS = {
         "retourenwert": "DECIMAL(18,2)",
         "kanal": "VARCHAR",
     },
-    "bestellpositionen": {
+    Tables.ORDER_ITEMS: {
         "order_id": "VARCHAR",
         "produkt": "VARCHAR",
         "kategorie": "VARCHAR",
