@@ -4,8 +4,8 @@ from pathlib import Path
 import duckdb
 import pytest
 
-from ofinto.import_csv import import_data
-from ofinto.merge import merge_data
+from ofinto.services.import_csv import import_data
+from ofinto.services.aggregation import merge_data
 from ofinto.model import (
     CLIENTS_TABLE,
     COMPANY_PROFILES_TABLE,

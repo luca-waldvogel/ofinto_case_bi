@@ -2,10 +2,17 @@
 name = "ofinto-case-bi"
 version = "0.1.0"
 requires-python = ">=3.12"
-dependencies = ["duckdb>=1.4,<2", "typer>=0.16,<1"]
+dependencies = [
+    "duckdb>=1.4,<2",
+    "typer>=0.16,<1",
+    "openai>=2,<3",
+    "pydantic>=2.11,<3",
+    "pytz>=2025.2",
+    "python-dotenv>=1,<2",
+]
 
 [project.scripts]
-ofinto = "ofinto.main:app"
+ofinto = "ofinto.cli:app"
 
 [dependency-groups]
 dev = ["pytest>=8.4"]
@@ -15,7 +22,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/ofinto"]
+packages = ["ofinto"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

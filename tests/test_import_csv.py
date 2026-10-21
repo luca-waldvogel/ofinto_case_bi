@@ -5,7 +5,7 @@ from pathlib import Path
 import duckdb
 import pytest
 
-from ofinto.import_csv import import_data
+from ofinto.services.import_csv import import_data
 from ofinto.model import (
     CLIENTS_TABLE,
     ENRICHMENT_TABLE,

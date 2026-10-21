@@ -3,7 +3,7 @@ from pathlib import Path
 
 import duckdb
 
-from .model import (
+from ..model import (
     CLIENTS_TABLE,
     COMPANY_PROFILES_TABLE,
     ENRICHMENT_TABLE,
@@ -24,6 +24,7 @@ def merge_data(database: Path, as_of: date = DEFAULT_AS_OF) -> list[dict]:
         raise ValueError(f'Datenbank fehlt: {database}. Zuerst importieren.')
 
     with duckdb.connect(str(database)) as connection:
+        # TODO: Check the hardcoded "motion" and "era" references
         connection.execute(f"""
             CREATE OR REPLACE TABLE "{COMPANY_PROFILES_TABLE}" AS
             WITH active_orders AS (
