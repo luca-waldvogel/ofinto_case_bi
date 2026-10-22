@@ -71,6 +71,7 @@ die Einordnung der Mitarbeiterbasis einschließlich der Match-Score-Grenze.
 ofinto/
 ├── __main__.py             # python -m ofinto
 ├── cli.py                  # CLI-Befehle und Konsolenausgaben
+├── config.py               # PromptClientConfig und Laden der Umgebungsvariablen
 ├── clients/
 │   └── prompt.py           # Generischer PromptClient und OpenAI-Anbindung
 ├── model/
@@ -100,6 +101,8 @@ Arbeitsverzeichnis. Im Projektordner enthält die Datei diese Konfiguration:
 ```dotenv
 OPENAI_MODEL=gpt-5-mini
 OPENAI_API_KEY=
+OPENAI_TIMEOUT=60
+OPENAI_MAX_RETRIES=2
 ```
 
 Den eigenen API-Schlüssel in `OPENAI_API_KEY` eintragen. `.env` ist durch
@@ -115,7 +118,9 @@ uv run ofinto extract-transcripts
 
 Das Eingabebeispiel gilt für zsh. Der API-Schlüssel wird nicht im Repository gespeichert.
 Das Modell ist standardmäßig `gpt-5-mini`. `OPENAI_MODEL` setzt einen anderen
-Standard, `--model` überschreibt ihn für den jeweiligen Extraktionslauf.
+Standard in der Konfiguration.
+`OPENAI_TIMEOUT` setzt den Netzwerk-Timeout in Sekunden, `OPENAI_MAX_RETRIES`
+die maximale Anzahl automatischer SDK-Retries.
 `OPENAI_BASE_URL` kann auf einen kompatiblen lokalen Endpunkt zeigen; dieser muss
 die Responses API einschließlich strukturierter Ausgaben unterstützen. Für lokale
 Endpunkte verlangt der Client ebenfalls `OPENAI_API_KEY` (gegebenenfalls ein Dummywert).
@@ -123,7 +128,6 @@ Es gibt keinen automatischen Rückfall auf die öffentliche API.
 
 ```sh
 uv run ofinto extract-transcripts --transcript-dir data/transkripte --database data/case.duckdb
-uv run ofinto extract-transcripts --model gpt-5-mini
 ```
 
 `extract-transcripts` liest die Fireflies-Kopfzeilen lokal und sendet je Gespräch
@@ -201,6 +205,21 @@ with PromptClient(ExtractionProgram) as extraction:
     signals = extraction.run(transcript)
 ```
 
+In `ofinto/config.py` definiert `PromptClientConfig` Modell, Timeout, `max_retries`,
+API-Schlüssel, optionalen API-Endpunkt (`base_url`) und die Antwortspeicherung
+(`store`, standardmäßig `False`). Ohne übergebene Konfiguration lädt der Client
+sie über `PromptClientConfig.from_env()` aus Umgebung und `.env`.
+Eine explizite Konfiguration kann so angepasst und übergeben werden:
+
+```python
+from dataclasses import replace
+from ofinto.config import PromptClientConfig
+
+config = replace(PromptClientConfig.from_env(), timeout=120.0, max_retries=1)
+with PromptClient(ExtractionProgram, config) as extraction:
+    signals = extraction.run(transcript)
+```
+
 Die Basis `PromptProgram[InputT, OutputT]` stellt die Hooks `prepare(input)`,
 `render_user_prompt(prepared_input)` und `postprocess(result)` bereit.
 `run` führt sie automatisch in dieser Reihenfolge um den Modellaufruf aus und
@@ -217,12 +236,12 @@ Der Client übergibt das Modell an `responses.parse(text_format=...)`; das SDK
 Prompts geschrieben. `return_type=str` verwendet denselben Client für reine
 Textantworten über `responses.create(...)`.
 
-Der Client erstellt im Konstruktor einen SDK-Transport
-mit 60 Sekunden Timeout und maximal zwei SDK-Retries und verwendet ihn für weitere
+Der Client erstellt im Konstruktor einen SDK-Transport mit den Werten aus seiner
+Konfiguration (standardmäßig 60 Sekunden Timeout und zwei SDK-Retries) und verwendet ihn für weitere
 Aufrufe wieder. Der `with`-Block schließt ihn am Ende, alternativ ist `close()` möglich.
 Der Extraktionslauf verwendet einen Client für alle Gespräche. Fehler in Hooks,
 ungültige Antworten und Ablehnungen lösen keine zusätzlichen Modellaufrufe aus.
-Requests verwenden `store=False`; das ersetzt keine vertraglichen Regeln zur
+Requests verwenden standardmäßig `store=False`; das ersetzt keine vertraglichen Regeln zur
 API-Datenverarbeitung.
 
 Die fiktiven Case-Daten dürfen laut Aufgabenstellung per API verarbeitet werden.

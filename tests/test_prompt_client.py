@@ -8,6 +8,8 @@ from openai import OpenAI
 from pydantic import BaseModel, Field
 
 from ofinto.model import TranscriptSignals
+from ofinto.config import PromptClientConfig
+from dataclasses import replace
 from ofinto.programs import ExtractionProgram, PromptProgram
 from ofinto.clients import PromptClient, PromptError
 
@@ -92,7 +94,7 @@ def test_sdk_transmits_descriptions_in_schema_only(sdk_factory):
 
     with OpenAI(api_key="test", http_client=httpx.Client(transport=httpx.MockTransport(handler))) as sdk:
         sdk_factory.return_value = sdk
-        assert PromptClient(AnswerProgram, model="gpt-5-mini").run("Warum?").message == "ja"
+        assert PromptClient(AnswerProgram).run("Warum?").message == "ja"
     payload = requests[0]
     assert payload["model"] == "gpt-5-mini"
     assert "max_output_tokens" not in payload
@@ -147,9 +149,9 @@ def test_hook_errors_are_not_retried(step, sdk_factory):
 def test_model_precedence_and_missing_key(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("OPENAI_MODEL", "environment-model")
-    assert PromptClient(AnswerProgram).model == "environment-model"
-    client = PromptClient(AnswerProgram, model="explicit-model")
-    assert client.model == "explicit-model"
+    assert PromptClient(AnswerProgram).config.model == "environment-model"
+    client = PromptClient(AnswerProgram, replace(PromptClientConfig.from_env(), model="explicit-model"))
+    assert client.config.model == "explicit-model"
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     with pytest.raises(ValueError, match="OPENAI_API_KEY fehlt"):
         PromptClient(AnswerProgram)
@@ -159,7 +161,42 @@ def test_default_model(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("OPENAI_MODEL", raising=False)
     client = PromptClient(AnswerProgram)
-    assert client.model == "gpt-5-mini"
+    assert client.config.model == "gpt-5-mini"
+
+
+def test_explicit_config_controls_sdk_and_request(monkeypatch, sdk_factory):
+    monkeypatch.setenv("OPENAI_MODEL", "environment-model")
+    config = PromptClientConfig(
+        model="configured-model", timeout=120.0, max_retries=4,
+        api_key="test-config-key", base_url="https://example.test/v1", store=True,
+    )
+    sdk = sdk_factory.return_value
+    sdk.responses.parse.return_value = response(Answer(message="ja"))
+    with PromptClient(AnswerProgram, config) as client:
+        assert client.run("Test").message == "ja"
+    sdk_factory.assert_called_once_with(
+        api_key="test-config-key", base_url="https://example.test/v1",
+        timeout=120.0, max_retries=4,
+    )
+    assert sdk.responses.parse.call_args.kwargs["model"] == "configured-model"
+    assert sdk.responses.parse.call_args.kwargs["store"] is True
+    assert "test-config-key" not in repr(config)
+
+
+def test_config_loads_timeout_retries_and_endpoint(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    for name in ("OPENAI_MODEL", "OPENAI_TIMEOUT", "OPENAI_MAX_RETRIES", "OPENAI_BASE_URL"):
+        monkeypatch.delenv(name, raising=False)
+    (tmp_path / ".env").write_text(
+        "OPENAI_MODEL=file-model\nOPENAI_TIMEOUT=90\n"
+        "OPENAI_MAX_RETRIES=3\nOPENAI_BASE_URL=https://example.test/v1\n"
+    )
+    config = PromptClientConfig.from_env()
+    assert (config.model, config.timeout, config.max_retries) == ("file-model", 90.0, 3)
+    assert config.base_url == "https://example.test/v1"
+    assert config.store is False
+    monkeypatch.setenv("OPENAI_TIMEOUT", "120")
+    assert PromptClientConfig.from_env().timeout == 120.0
 
 
 def test_dotenv_initializes_model_and_sdk_key(monkeypatch, tmp_path):
@@ -172,20 +209,21 @@ def test_dotenv_initializes_model_and_sdk_key(monkeypatch, tmp_path):
     sdk.responses.parse.return_value = response(Answer(message="ja"))
     monkeypatch.setattr("ofinto.clients.prompt.OpenAI", sdk_factory)
     with PromptClient(AnswerProgram) as client:
-        assert client.model == "file-model"
+        assert client.config.model == "file-model"
         assert client.run("Test").message == "ja"
         assert client.run("Weitere Frage").message == "ja"
         sdk.close.assert_not_called()
     import os
-    assert os.environ["OPENAI_API_KEY"] == "test-file-key"
-    sdk_factory.assert_called_once_with(timeout=60.0, max_retries=2)
+    assert client.config.api_key == "test-file-key"
+    assert "OPENAI_API_KEY" not in os.environ
+    sdk_factory.assert_called_once_with(api_key="test-file-key", base_url=None, timeout=60.0, max_retries=2)
     assert sdk.responses.parse.call_count == 2
     sdk.close.assert_called_once()
     monkeypatch.setenv("OPENAI_MODEL", "environment-model")
     monkeypatch.setenv("OPENAI_API_KEY", "environment-key")
-    assert PromptClient(AnswerProgram).model == "environment-model"
+    assert PromptClient(AnswerProgram).config.model == "environment-model"
     assert os.environ["OPENAI_API_KEY"] == "environment-key"
-    assert PromptClient(AnswerProgram, model="explicit-model").model == "explicit-model"
+    assert PromptClient(AnswerProgram, replace(PromptClientConfig.from_env(), model="explicit-model")).config.model == "explicit-model"
 
 
 def test_extraction_model_and_program():
@@ -269,7 +307,7 @@ def test_api_error_reports_only_server_message(sdk_factory, caplog):
     ) as sdk:
         sdk_factory.return_value = sdk
         with pytest.raises(PromptError) as caught:
-            PromptClient(AnswerProgram, model="gpt-5-mini").run("SENSITIVE_TRANSCRIPT")
+            PromptClient(AnswerProgram).run("SENSITIVE_TRANSCRIPT")
     message = str(caught.value)
     assert message == "AnswerProgram: NotFoundError: Organization verification required"
     assert "SENSITIVE" not in message + caplog.text

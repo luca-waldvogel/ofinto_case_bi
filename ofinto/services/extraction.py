@@ -7,6 +7,7 @@ import duckdb
 
 from ..programs import ExtractionProgram
 from ..clients import PromptClient
+from ..config import PromptClientConfig
 
 logger = logging.getLogger(__name__)
 
@@ -51,16 +52,15 @@ class ExtractionSummary:
 def extract_transcripts(
     transcript_dir: Path,
     database: Path,
-    *,
-    model: str | None = None,
 ) -> ExtractionSummary:
     logger.info(f"Suche Transkripte in {transcript_dir}")
     sources = sorted(transcript_dir.glob("*.txt"))
     if not sources:
         raise ValueError(f"Keine .txt-Transkripte gefunden: {transcript_dir}")
-    client = PromptClient(ExtractionProgram, model=model)
+    config = PromptClientConfig.from_env()
+    client = PromptClient(ExtractionProgram, config)
     summary = ExtractionSummary()
-    logger.info(f"Extraktion startet: {len(sources)} Dateien; Modell={client.model}")
+    logger.info(f"Extraktion startet: {len(sources)} Dateien; Modell={config.model}")
     with client, duckdb.connect(str(database)) as connection:
         connection.execute("""
             CREATE TABLE IF NOT EXISTS transcript_signals (

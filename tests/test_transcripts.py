@@ -30,7 +30,6 @@ def write_transcript(directory, call_id="C01", body="Bonjour, trois postes à Ge
 def mock_client(result=None):
     client = MagicMock(spec=PromptClient)
     client.__enter__.return_value = client
-    client.model = "test-model"
     client.run.return_value = result if result is not None else signals()
     return client
 

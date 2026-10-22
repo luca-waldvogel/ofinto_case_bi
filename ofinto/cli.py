@@ -80,11 +80,10 @@ def aggregate(
 def extract_transcripts(
     transcript_dir: Annotated[Path, typer.Option("--transcript-dir", exists=True, file_okay=False)] = Path("data/transkripte"),
     database: Annotated[Path, typer.Option("--database", dir_okay=False)] = Path("data/case.duckdb"),
-    model: Annotated[str | None, typer.Option("--model", help="Überschreibt OPENAI_MODEL.")] = None,
 ) -> None:
     """Die fünf Pflichtsignale extrahieren und separat in DuckDB speichern."""
     try:
-        summary = extract_signals(transcript_dir, database, model=model)
+        summary = extract_signals(transcript_dir, database)
     except (duckdb.Error, OSError, ValueError) as error:
         typer.secho(f"Extraktion fehlgeschlagen: {error}", fg=typer.colors.RED, err=True)
         raise typer.Exit(code=1) from error

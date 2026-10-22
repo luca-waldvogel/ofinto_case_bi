@@ -1,15 +1,12 @@
 import logging
-import os
-from pathlib import Path
 from typing import Generic, cast
 
-from dotenv import load_dotenv
 from openai import APIError, OpenAI
 from pydantic import BaseModel
 
+from ..config import PromptClientConfig
 from ..programs import InputT, OutputT, PromptProgram
 
-DEFAULT_MODEL = "gpt-5-mini"
 logger = logging.getLogger(__name__)
 
 
@@ -27,20 +24,23 @@ class PromptClient(Generic[InputT, OutputT]):
     def __init__(
         self,
         program: type[PromptProgram[InputT, OutputT]],
-        *,
-        model: str | None = None,
+        config: PromptClientConfig | None = None,
     ) -> None:
-        load_dotenv(Path.cwd() / ".env", override=False)
         self.program = program()
-        self.model = model or os.environ.get("OPENAI_MODEL") or DEFAULT_MODEL
+        self.config = config if config is not None else PromptClientConfig.from_env()
         result_type = self.program.return_type
         if result_type is not str and not (
             isinstance(result_type, type) and issubclass(result_type, BaseModel)
         ):
             raise TypeError("return_type muss str oder ein Pydantic-Modell sein")
-        if not os.environ.get("OPENAI_API_KEY"):
+        if not self.config.api_key:
             raise ValueError("OPENAI_API_KEY fehlt")
-        self._transport = OpenAI(timeout=60.0, max_retries=2)
+        self._transport = OpenAI(
+            api_key=self.config.api_key,
+            base_url=self.config.base_url,
+            timeout=self.config.timeout,
+            max_retries=self.config.max_retries,
+        )
 
     def __enter__(self) -> "PromptClient[InputT, OutputT]":
         return self
@@ -59,14 +59,14 @@ class PromptClient(Generic[InputT, OutputT]):
             prepared = self.program.prepare(value)
             user_prompt = self.program.render_user_prompt(prepared)
             kwargs = {
-                "model": self.model,
+                "model": self.config.model,
                 "input": [
                     {"role": "system", "content": self.program.system_prompt},
                     {"role": "user", "content": user_prompt},
                 ],
-                "store": False,
+                "store": self.config.store,
             }
-            logger.info(f"{program_name}: sende Modellanfrage (Modell={self.model})")
+            logger.info(f"{program_name}: sende Modellanfrage (Modell={self.config.model})")
             if self.program.return_type is str:
                 response = self._transport.responses.create(**kwargs)
             else:
