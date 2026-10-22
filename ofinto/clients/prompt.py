@@ -84,7 +84,7 @@ class PromptClient(Generic[InputT, OutputT]):
                 raise ValueError("Keine verwertbare Modellantwort (leer oder abgelehnt)")
             return self.program.postprocess(cast(OutputT, result))
         except Exception as error:
-            detail = str(error)
+            detail = f"{type(error).__name__}: Prompt-Ausführung fehlgeschlagen"
             if isinstance(error, APIError):
                 message = error.body.get("message", "API-Aufruf fehlgeschlagen") if isinstance(error.body, dict) else "API-Aufruf fehlgeschlagen"
                 detail = f"{type(error).__name__}: {message}"
