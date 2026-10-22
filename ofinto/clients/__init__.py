@@ -1,1 +1,3 @@
-"""Wiederverwendbare Clients für externe Modelle und Dienste."""
+from .prompt import PromptClient, PromptError
+
+__all__ = ["PromptClient", "PromptError"]

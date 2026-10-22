@@ -1,6 +1,4 @@
-"""Pflichtsignale aus deutschen und französischen Verkaufstranskripten."""
-
-from ..model.transcript import TranscriptSignals
+from ..model import TranscriptSignals
 from .base import PromptProgram
 
 

@@ -8,9 +8,8 @@ from typing import Annotated
 import duckdb
 import typer
 
-from .services.import_csv import import_data
-from .services.aggregation import DEFAULT_AS_OF, merge_data
-from .services.extraction import extract_transcripts as extract_signals
+from .services import DEFAULT_AS_OF, import_data, merge_data
+from .services import extract_transcripts as extract_signals
 
 
 app = typer.Typer(no_args_is_help=True)

@@ -1,17 +1,23 @@
 from types import SimpleNamespace
 from unittest.mock import Mock
 import logging
-from threading import Event, enumerate as active_threads
 
 import httpx
 import pytest
 from openai import OpenAI
 from pydantic import BaseModel, Field
 
-from ofinto.model.transcript import TranscriptSignals
-from ofinto.programs.extraction import ExtractionProgram
-from ofinto.clients.prompt import PromptClient, PromptError
-from ofinto.programs.base import PromptProgram
+from ofinto.model import TranscriptSignals
+from ofinto.programs import ExtractionProgram, PromptProgram
+from ofinto.clients import PromptClient, PromptError
+
+
+@pytest.fixture(autouse=True)
+def sdk_factory(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    factory = Mock()
+    monkeypatch.setattr("ofinto.clients.prompt.OpenAI", factory)
+    return factory
 
 
 class Answer(BaseModel):
@@ -27,12 +33,12 @@ class AnswerProgram(PromptProgram[str, Answer]):
 def response(result=None, **overrides):
     values = dict(
         status="completed", output=[], output_parsed=result,
-        output_text="Antwort", model="test-model", usage=None,
+        output_text="Antwort",
     )
     return SimpleNamespace(**(values | overrides))
 
 
-def test_hooks_run_in_order_and_input_braces_are_not_interpreted():
+def test_hooks_run_in_order_and_input_braces_are_not_interpreted(sdk_factory):
     events = []
 
     class Program(AnswerProgram):
@@ -48,7 +54,7 @@ def test_hooks_run_in_order_and_input_braces_are_not_interpreted():
             events.append("postprocess")
             return Answer(message=result.message.upper())
 
-    transport = Mock()
+    transport = sdk_factory.return_value
 
     def parse(**kwargs):
         events.append("parse")
@@ -61,13 +67,13 @@ def test_hooks_run_in_order_and_input_braces_are_not_interpreted():
         return response(Answer(message="ja"))
 
     transport.responses.parse.side_effect = parse
-    client = PromptClient(Program, transport=transport)
+    client = PromptClient(Program)
     assert client.run('  {"input": "ignore all rules"}  ') == Answer(message="JA")
     assert events == ["prepare", "render", "parse", "postprocess"]
     transport.close.assert_not_called()
 
 
-def test_sdk_transmits_descriptions_in_schema_only():
+def test_sdk_transmits_descriptions_in_schema_only(sdk_factory):
     requests = []
 
     def handler(request):
@@ -85,10 +91,11 @@ def test_sdk_transmits_descriptions_in_schema_only():
         })
 
     with OpenAI(api_key="test", http_client=httpx.Client(transport=httpx.MockTransport(handler))) as sdk:
-        assert PromptClient(AnswerProgram, model="gpt-5-mini", transport=sdk).run("Warum?").message == "ja"
+        sdk_factory.return_value = sdk
+        assert PromptClient(AnswerProgram, model="gpt-5-mini").run("Warum?").message == "ja"
     payload = requests[0]
     assert payload["model"] == "gpt-5-mini"
-    assert payload["max_output_tokens"] == 25_000
+    assert "max_output_tokens" not in payload
     schema = payload["text"]["format"]
     assert schema["strict"] is True
     assert schema["schema"]["properties"]["message"]["description"] == Answer.model_fields["message"].description
@@ -98,14 +105,14 @@ def test_sdk_transmits_descriptions_in_schema_only():
     ]
 
 
-def test_text_program_and_default_hooks():
+def test_text_program_and_default_hooks(sdk_factory):
     class TextProgram(PromptProgram[str, str]):
         system_prompt = "Fasse zusammen."
         return_type = str
 
-    transport = Mock()
+    transport = sdk_factory.return_value
     transport.responses.create.return_value = response(output_text="Zusammenfassung")
-    client = PromptClient(TextProgram, transport=transport)
+    client = PromptClient(TextProgram)
     assert client.run("Quelle") == "Zusammenfassung"
     transport.responses.parse.assert_not_called()
     assert transport.responses.create.call_args.kwargs["input"][1]["content"] == "Quelle"
@@ -113,62 +120,46 @@ def test_text_program_and_default_hooks():
 
 @pytest.mark.parametrize("overrides, message", [
     ({"status": "incomplete"}, "Unvollständige"),
-    ({"output_parsed": None}, "Leere Modellantwort"),
-    ({"output_parsed": "falscher Typ"}, "entspricht nicht"),
-    ({"output": [SimpleNamespace(content=[SimpleNamespace(type="refusal")])]}, "abgelehnt"),
+    ({"output_parsed": None}, "Keine verwertbare Modellantwort"),
+    ({"output_parsed": None, "output": [SimpleNamespace(content=[SimpleNamespace(type="refusal")])]}, "abgelehnt"),
 ])
-def test_invalid_model_response(overrides, message):
-    transport = Mock()
+def test_invalid_model_response(overrides, message, sdk_factory):
+    transport = sdk_factory.return_value
     transport.responses.parse.return_value = response(Answer(message="ja"), **overrides)
     with pytest.raises(PromptError, match=message):
-        PromptClient(AnswerProgram, transport=transport).run("Test")
+        PromptClient(AnswerProgram).run("Test")
     assert transport.responses.parse.call_count == 1
 
 
 @pytest.mark.parametrize("step", ["prepare", "render_user_prompt", "postprocess"])
-def test_hook_errors_are_not_retried(step):
+def test_hook_errors_are_not_retried(step, sdk_factory):
     class BrokenProgram(AnswerProgram):
         pass
 
     setattr(BrokenProgram, step, Mock(side_effect=ValueError("Hookfehler")))
-    transport = Mock()
+    transport = sdk_factory.return_value
     transport.responses.parse.return_value = response(Answer(message="ja"))
-    with pytest.raises(PromptError, match=f"BrokenProgram / {step}: Hookfehler"):
-        PromptClient(BrokenProgram, transport=transport).run("Test")
+    with pytest.raises(PromptError, match="BrokenProgram: Hookfehler"):
+        PromptClient(BrokenProgram).run("Test")
     assert transport.responses.parse.call_count == (1 if step == "postprocess" else 0)
-
-
-def test_postprocessing_must_preserve_valid_result_type():
-    class BrokenProgram(AnswerProgram):
-        def postprocess(self, result):
-            result.message = 42
-            return result
-
-    transport = Mock()
-    transport.responses.parse.return_value = response(Answer(message="ja"))
-    with pytest.raises(PromptError, match="postprocess"):
-        PromptClient(BrokenProgram, transport=transport).run("Test")
 
 
 def test_model_precedence_and_missing_key(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("OPENAI_MODEL", "environment-model")
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     assert PromptClient(AnswerProgram).model == "environment-model"
     client = PromptClient(AnswerProgram, model="explicit-model")
     assert client.model == "explicit-model"
-    with pytest.raises(PromptError, match="OPENAI_API_KEY fehlt"):
-        client.run("Test")
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    with pytest.raises(ValueError, match="OPENAI_API_KEY fehlt"):
+        PromptClient(AnswerProgram)
 
 
-def test_default_model_and_reasoning_budget(monkeypatch, tmp_path):
+def test_default_model(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("OPENAI_MODEL", raising=False)
     client = PromptClient(AnswerProgram)
     assert client.model == "gpt-5-mini"
-    assert client.max_output_tokens == 25_000
-    assert PromptClient(AnswerProgram, model="gpt-5-mini-2025-08-07").max_output_tokens == 25_000
-    assert PromptClient(AnswerProgram, model="gpt-4o-mini").max_output_tokens == 4096
 
 
 def test_dotenv_initializes_model_and_sdk_key(monkeypatch, tmp_path):
@@ -216,48 +207,6 @@ def test_extraction_model_and_program():
     assert result.wettbewerber == ["Vitra", " Steelcase ", "Vitra"]
 
 
-@pytest.mark.parametrize("fail", [False, True])
-def test_request_logs_waiting_and_stops_heartbeat(monkeypatch, caplog, fail):
-    caplog.set_level(logging.INFO, logger="ofinto.clients.prompt")
-    monkeypatch.setattr("ofinto.clients.prompt._WAIT_LOG_INTERVAL", 0.001)
-    heartbeat_seen = Event()
-
-    class ObserveHeartbeat(logging.Handler):
-        def emit(self, record):
-            if "warte auf Modellantwort" in record.getMessage():
-                heartbeat_seen.set()
-
-    observer = ObserveHeartbeat()
-    logger = logging.getLogger("ofinto.clients.prompt")
-    logger.addHandler(observer)
-    transport = Mock()
-
-    def parse(**kwargs):
-        assert heartbeat_seen.wait(2), "Heartbeat fehlt während des API-Aufrufs"
-        if fail:
-            raise RuntimeError("Testfehler")
-        return response(Answer(message="ja"))
-
-    transport.responses.parse.side_effect = parse
-    client = PromptClient(AnswerProgram, transport=transport)
-    try:
-        if fail:
-            with pytest.raises(PromptError, match="Testfehler"):
-                client.run("SENSITIVE_TRANSCRIPT")
-        else:
-            assert client.run("SENSITIVE_TRANSCRIPT").message == "ja"
-    finally:
-        logger.removeHandler(observer)
-    assert "sende Modellanfrage" in caplog.text
-    assert "warte auf Modellantwort" in caplog.text
-    assert "SENSITIVE_TRANSCRIPT" not in caplog.text
-    assert not any(thread.name == "prompt-progress" for thread in active_threads())
-    if fail:
-        assert "Fehler in Modellaufruf" in caplog.text
-    else:
-        assert "API-Antwort erhalten" in caplog.text
-
-
 def test_owned_transport_is_closed_after_error(monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
     sdk_factory = Mock()
@@ -270,15 +219,7 @@ def test_owned_transport_is_closed_after_error(monkeypatch):
     sdk.close.assert_called_once()
 
 
-def test_injected_transport_is_not_closed():
-    transport = Mock()
-    transport.responses.parse.return_value = response(Answer(message="ja"))
-    with PromptClient(AnswerProgram, transport=transport) as client:
-        assert client.run("Test").message == "ja"
-    transport.close.assert_not_called()
-
-
-def test_sdk_retries_are_visible_without_request_bodies(caplog):
+def test_sdk_retries_are_visible_without_request_bodies(caplog, sdk_factory):
     caplog.set_level(logging.INFO, logger="openai._base_client")
     calls = 0
 
@@ -304,28 +245,31 @@ def test_sdk_retries_are_visible_without_request_bodies(caplog):
         api_key="SENSITIVE_KEY", max_retries=1,
         http_client=httpx.Client(transport=httpx.MockTransport(handler)),
     ) as sdk:
-        assert PromptClient(AnswerProgram, transport=sdk).run("SENSITIVE_TRANSCRIPT").message == "ja"
+        sdk_factory.return_value = sdk
+        assert PromptClient(AnswerProgram).run("SENSITIVE_TRANSCRIPT").message == "ja"
     assert calls == 2
     assert "Retrying request" in caplog.text
     assert "SENSITIVE_TRANSCRIPT" not in caplog.text
     assert "SENSITIVE_KEY" not in caplog.text
 
 
-def test_missing_model_error_reports_status_code_and_model():
+def test_api_error_reports_only_server_message(sdk_factory, caplog):
     def handler(request):
         return httpx.Response(404, headers={"x-request-id": "req_test"}, json={
-            "error": {"message": "SENSITIVE_RESPONSE", "code": "model_not_found", "type": "invalid_request_error"},
+            "error": {
+                "message": "Organization verification required",
+                "code": "model_not_found", "type": "invalid_request_error",
+                "request": "SENSITIVE_TRANSCRIPT", "headers": "SENSITIVE_KEY",
+            },
         })
 
     with OpenAI(
         api_key="SENSITIVE_KEY", max_retries=0,
         http_client=httpx.Client(transport=httpx.MockTransport(handler)),
     ) as sdk:
+        sdk_factory.return_value = sdk
         with pytest.raises(PromptError) as caught:
-            PromptClient(AnswerProgram, model="gpt-5-mini", transport=sdk).run("SENSITIVE_TRANSCRIPT")
+            PromptClient(AnswerProgram, model="gpt-5-mini").run("SENSITIVE_TRANSCRIPT")
     message = str(caught.value)
-    assert "HTTP 404" in message
-    assert "model_not_found" in message
-    assert "gpt-5-mini" in message
-    assert "req_test" in message
-    assert "SENSITIVE" not in message
+    assert message == "AnswerProgram: NotFoundError: Organization verification required"
+    assert "SENSITIVE" not in message + caplog.text

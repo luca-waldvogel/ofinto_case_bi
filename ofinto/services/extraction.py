@@ -1,6 +1,3 @@
-"""Transkripte lokal laden, auswerten und Ergebnisse speichern."""
-
-import json
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -8,8 +5,8 @@ from pathlib import Path
 
 import duckdb
 
-from ..programs.extraction import ExtractionProgram
-from ..clients.prompt import PromptClient
+from ..programs import ExtractionProgram
+from ..clients import PromptClient
 
 logger = logging.getLogger(__name__)
 
@@ -57,13 +54,13 @@ def extract_transcripts(
     *,
     model: str | None = None,
 ) -> ExtractionSummary:
-    logger.info("Suche Transkripte in %s", transcript_dir)
+    logger.info(f"Suche Transkripte in {transcript_dir}")
     sources = sorted(transcript_dir.glob("*.txt"))
     if not sources:
         raise ValueError(f"Keine .txt-Transkripte gefunden: {transcript_dir}")
     client = PromptClient(ExtractionProgram, model=model)
     summary = ExtractionSummary()
-    logger.info("Extraktion startet: %d Dateien; Modell=%s", len(sources), client.model)
+    logger.info(f"Extraktion startet: {len(sources)} Dateien; Modell={client.model}")
     with client, duckdb.connect(str(database)) as connection:
         connection.execute("""
             CREATE TABLE IF NOT EXISTS transcript_signals (
@@ -71,37 +68,31 @@ def extract_transcripts(
                 conversation_date TIMESTAMPTZ NOT NULL,
                 gespraechstyp VARCHAR NOT NULL, kaufzeitpunkt VARCHAR NOT NULL,
                 arbeitsplaetze BIGINT, wettbewerber VARCHAR[] NOT NULL,
-                einwaende VARCHAR[] NOT NULL,
-                model VARCHAR NOT NULL, response_model VARCHAR,
-                processed_at TIMESTAMPTZ NOT NULL, usage JSON
+                einwaende VARCHAR[] NOT NULL
             )
         """)
         for index, source in enumerate(sources, start=1):
             progress = f"[{index}/{len(sources)}] {source.stem}"
             try:
-                logger.info("%s: starte Extraktion", progress)
+                logger.info(f"{progress}: starte Extraktion")
                 transcript = read_transcript(source)
                 result = client.run(transcript.text)
                 connection.execute("""
                     INSERT OR REPLACE INTO transcript_signals (
                         call_id, title, conversation_date, gespraechstyp, kaufzeitpunkt,
-                        arbeitsplaetze, wettbewerber, einwaende, model, response_model,
-                        processed_at, usage
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        arbeitsplaetze, wettbewerber, einwaende
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """, [
                     transcript.call_id, transcript.title, transcript.conversation_date,
                     result.gespraechstyp, result.kaufzeitpunkt, result.arbeitsplaetze,
-                    result.wettbewerber, result.einwaende, client.model,
-                    client.response_model, datetime.now(timezone.utc),
-                    json.dumps(client.usage),
+                    result.wettbewerber, result.einwaende,
                 ])
                 summary.extracted += 1
-                logger.info("%s: Ergebnis gespeichert", progress)
+                logger.info(f"{progress}: Ergebnis gespeichert")
             except (OSError, ValueError, RuntimeError, duckdb.Error) as error:
                 summary.errors[source.stem] = str(error)
-                logger.error("%s: fehlgeschlagen: %s", progress, error)
+                logger.error(f"{progress}: fehlgeschlagen: {error}")
     logger.info(
-        "Extraktion beendet: %d extrahiert, %d Fehler",
-        summary.extracted, len(summary.errors),
+        f"Extraktion beendet: {summary.extracted} extrahiert, {len(summary.errors)} Fehler"
     )
     return summary

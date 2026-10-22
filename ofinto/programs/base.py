@@ -1,5 +1,3 @@
-"""Basis für fachliche Programme; enthält keine API- oder Speicherlogik."""
-
 from typing import Generic, TypeVar
 
 InputT = TypeVar("InputT")
@@ -26,5 +24,5 @@ class PromptProgram(Generic[InputT, OutputT]):
         return self.user_prompt.format(input=value)
 
     def postprocess(self, result: OutputT) -> OutputT:
-        """Die bereits validierte Modellantwort nachbereiten."""
+        """Die validierte Modellantwort nachbereiten; Änderungen müssen gültig bleiben."""
         return result

@@ -6,3 +6,4 @@ from .schemas import (
     ORDERS_TABLE as ORDERS_TABLE,
     SCHEMAS as SCHEMAS,
 )
+from .transcript import TranscriptSignals as TranscriptSignals

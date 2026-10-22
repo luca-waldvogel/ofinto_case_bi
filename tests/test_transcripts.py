@@ -1,14 +1,13 @@
-from unittest.mock import Mock
+from unittest.mock import MagicMock, Mock
 
 import duckdb
 import pytest
 from typer.testing import CliRunner
 
 from ofinto.cli import app
-from ofinto.model.transcript import TranscriptSignals
-from ofinto.programs.extraction import ExtractionProgram
-from ofinto.clients.prompt import PromptClient
-from ofinto.services.extraction import extract_transcripts, read_transcript
+from ofinto.model import TranscriptSignals
+from ofinto.clients import PromptClient
+from ofinto.services import extract_transcripts, read_transcript
 
 
 def signals(**overrides):
@@ -29,8 +28,10 @@ def write_transcript(directory, call_id="C01", body="Bonjour, trois postes à Ge
 
 
 def mock_client(result=None):
-    client = PromptClient(ExtractionProgram, model="test-model", transport=Mock())
-    client.run = Mock(return_value=result if result is not None else signals())
+    client = MagicMock(spec=PromptClient)
+    client.__enter__.return_value = client
+    client.model = "test-model"
+    client.run.return_value = result if result is not None else signals()
     return client
 
 
@@ -108,7 +109,6 @@ def test_cli_extraction_missing_key(tmp_path, monkeypatch):
         "extract-transcripts", "--transcript-dir", str(tmp_path), "--database", str(tmp_path / "case.duckdb"),
     ])
     assert result.exit_code == 1
-    assert "C01" in result.output
     assert "OPENAI_API_KEY fehlt" in result.output
 
 

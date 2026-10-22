@@ -148,8 +148,7 @@ einheitliche Stichworte und fasst sinngleiche Nennungen zusammen. Die Nachbereit
 bereinigt Leerraum, entfernt leere Einträge und Duplikate unabhängig von der
 Groß-/Kleinschreibung und sortiert die Liste.
 
-Zusätzlich enthält die Tabelle Titel, Gesprächsdatum, angefragtes und tatsächlich geliefertes Modell,
-Verarbeitungszeit und Tokenverbrauch (falls vom Endpunkt geliefert).
+Zusätzlich enthält die Tabelle nur Gesprächs-ID, Titel und Gesprächsdatum.
 Firmenprofile werden nicht verändert. Mitarbeiterdaten, Zukunftspläne,
 Quellenbelege und die Zuordnung zu Firmenkonten folgen in einem weiteren Schritt.
 
@@ -177,12 +176,10 @@ PY
 
 Der Extraktionsbefehl schreibt Fortschrittslogs ohne Zeitmessung sofort auf stderr:
 Datei und Fortschritt (`[1/20] C01`), Start und Ende des API-Aufrufs,
-Speichern des Ergebnisses sowie Fehler. Während einer
-Modellanfrage erscheint alle 15 Sekunden eine Wartemeldung.
+Speichern des Ergebnisses sowie Fehler.
 Auch automatische SDK-Retries werden angezeigt. Der Netzwerk-Timeout beträgt
 60 Sekunden pro Netzwerkoperation; mit bis zu zwei Retries kann eine Anfrage
-mehrere Minuten dauern. Die Wartemeldung startet keine zusätzlichen Requests und
-stellt keine Bestätigung serverseitigen Fortschritts dar. Transkriptinhalte,
+mehrere Minuten dauern. Transkriptinhalte,
 Prompts, API-Schlüssel und vollständige Modellantworten werden nicht protokolliert.
 
 ```sh
@@ -197,8 +194,8 @@ Jedes Programm definiert in einer eigenen Python-Datei Systemprompt, Userprompt,
 Rückgabetyp und optional Vor-/Nachbereitung:
 
 ```python
-from ofinto.clients.prompt import PromptClient
-from ofinto.programs.extraction import ExtractionProgram
+from ofinto.clients import PromptClient
+from ofinto.programs import ExtractionProgram
 
 with PromptClient(ExtractionProgram) as extraction:
     signals = extraction.run(transcript)
@@ -207,7 +204,8 @@ with PromptClient(ExtractionProgram) as extraction:
 Die Basis `PromptProgram[InputT, OutputT]` stellt die Hooks `prepare(input)`,
 `render_user_prompt(prepared_input)` und `postprocess(result)` bereit.
 `run` führt sie automatisch in dieser Reihenfolge um den Modellaufruf aus und
-übernimmt die vom SDK geparste Antwort und validiert das Ergebnis nach der Nachbereitung.
+übernimmt die vom SDK validierte Antwort und gibt das Ergebnis der Nachbereitung
+direkt zurück. `postprocess()` ist für die Gültigkeit seiner Änderungen verantwortlich.
 Standardmäßig reichen die
 Hooks Werte unverändert durch und setzen `{input}` im Userprompt ein.
 Programme benötigen keine Konstruktorparameter und halten keinen veränderlichen
@@ -219,25 +217,11 @@ Der Client übergibt das Modell an `responses.parse(text_format=...)`; das SDK
 Prompts geschrieben. `return_type=str` verwendet denselben Client für reine
 Textantworten über `responses.create(...)`.
 
-Für mehrere Programme kann ein gemeinsamer SDK-Transport injiziert werden:
-
-```python
-from openai import OpenAI
-
-with OpenAI(timeout=60.0, max_retries=2) as transport:
-    extraction = PromptClient(ExtractionProgram, transport=transport)
-    signals = extraction.run(transcript)
-```
-
-Der Aufrufer verwaltet die Lebensdauer eines injizierten Transports. Ohne
-Injektion öffnet der Client beim ersten `run` einen eigenen SDK-Transport
+Der Client erstellt im Konstruktor einen SDK-Transport
 mit 60 Sekunden Timeout und maximal zwei SDK-Retries und verwendet ihn für weitere
 Aufrufe wieder. Der `with`-Block schließt ihn am Ende, alternativ ist `close()` möglich.
 Der Extraktionslauf verwendet einen Client für alle Gespräche. Fehler in Hooks,
 ungültige Antworten und Ablehnungen lösen keine zusätzlichen Modellaufrufe aus.
-Für GPT-5-Modelle beträgt das Ausgabelimit 25.000 Tokens einschließlich interner
-Reasoning-Tokens, für andere Modelle 4.096 Tokens. Das ist eine Obergrenze,
-keine reservierte oder automatisch verbrauchte Tokenmenge.
 Requests verwenden `store=False`; das ersetzt keine vertraglichen Regeln zur
 API-Datenverarbeitung.
 
