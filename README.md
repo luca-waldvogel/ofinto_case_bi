@@ -39,7 +39,7 @@ ohne API oder Modell. Die separate Transkriptextraktion ist unten beschrieben.
 |---|---|
 | `anzahl_bestellungen`, `letzte_bestellung` | Wirksame Bestellungen bis zum Stichtag |
 | `tische_min`, `tische_max` | Mengen von Tischen einschließlich Gestellen |
-| `buerostuehle_min`, `buerostuehle_max` | Mengen von Motion/Era; Go wird als Besprechungsstuhl ausgelassen |
+| `buerostuehle_min`, `buerostuehle_max` | Mengen der als Arbeitsplatzstühle eingeordneten Produkte |
 | `teilretouren` | Anzahl Bestellungen mit unbekannten zurückgegebenen Positionen |
 | `mitarbeiterbasis` | `verwendbar`, `eingeschränkt` oder `nicht verwendbar` |
 | `hinweise` | Kurze Begründungen und Hinweise zu Teilretouren |
@@ -47,6 +47,11 @@ ohne API oder Modell. Die separate Transkriptextraktion ist unten beschrieben.
 Für Teilretouren zählt die Menge nur zur Obergrenze, weil die behaltenen Produkte
 unbekannt sind. Stornos und Vollretouren zählen nicht. Möbelmengen sind noch keine
 Anzahl ausgestatteter Arbeitsplätze.
+
+**Annahme:** Motion und Era werden als Arbeitsplatzstühle gezählt, Go als
+Besprechungsstuhl ausgeschlossen. Die Liste `WORKPLACE_CHAIRS` in
+`ofinto/services/aggregation.py` enthält diese Zuordnung und wird als Parameter
+an SQL übergeben. Bei neuen Produkten oder Namensänderungen muss sie geprüft werden.
 
 Die Mitarbeiterbasis ist **nicht verwendbar**, wenn eine positive Mitarbeiterzahl
 fehlt oder ihr Bezug nicht eindeutig `Standort` ist. Bei fehlendem Datum, einem
