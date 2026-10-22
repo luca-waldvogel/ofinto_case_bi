@@ -37,7 +37,7 @@ def read_transcript(source: Path) -> Transcript:
     except ValueError as error:
         raise ValueError("Date fehlt oder ist kein ISO-Zeitstempel") from error
     if conversation_date.tzinfo is None:
-        raise ValueError("Date benötigt eine Zeitzone")
+        conversation_date = conversation_date.replace(tzinfo=timezone.utc)
     return Transcript(
         source.stem, title, conversation_date.astimezone(timezone.utc), text,
     )

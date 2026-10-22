@@ -131,7 +131,8 @@ uv run ofinto extract-transcripts --transcript-dir data/transkripte --database d
 ```
 
 `extract-transcripts` liest die Fireflies-Kopfzeilen lokal und sendet je Gespräch
-das vollständige Transkript an das Modell. Die fünf Pflichtfelder werden separat
+das vollständige Transkript an das Modell. Gesprächszeitstempel werden nach UTC
+umgerechnet; fehlt die Zeitzone, wird UTC angenommen. Die fünf Pflichtfelder werden separat
 in `transcript_signals` gespeichert:
 
 | Feld | Bedeutung |
@@ -148,9 +149,8 @@ die Anzahl neu auszustattender Arbeitsplätze. Optionale spätere Etappen werden
 nicht zur konkretisierten ersten Etappe addiert.
 
 Einwände sind nicht auf feste Kategorien beschränkt. Der Prompt fordert kurze,
-einheitliche Stichworte und fasst sinngleiche Nennungen zusammen. Die Nachbereitung
-bereinigt Leerraum, entfernt leere Einträge und Duplikate unabhängig von der
-Groß-/Kleinschreibung und sortiert die Liste.
+einheitliche Stichworte und das Zusammenfassen sinngleicher Nennungen.
+Die Listen werden ohne zusätzliche Nachbereitung gespeichert.
 
 Zusätzlich enthält die Tabelle nur Gesprächs-ID, Titel und Gesprächsdatum.
 Firmenprofile werden nicht verändert. Mitarbeiterdaten, Zukunftspläne,
@@ -249,7 +249,8 @@ Bei echten Kundendaten muss auch die Modellinferenz lokal erfolgen.
 Einlesen und Speichern laufen bereits lokal. Ein Wechsel des Endpunkts erfordert
 erneute Prüfung der API-Kompatibilität und Extraktionsqualität.
 
-Die Tests verwenden simulierte Antworten einschließlich eines HTTP-Mocktransports,
-der die echte SDK-Schemaübermittlung prüft. Sie benötigen keinen API-Schlüssel und
-belegen keine fachliche Modellgüte. Die fachliche Prüfung erfolgt manuell anhand
-der gespeicherten Ergebnisse und der Originaltranskripte.
+Die Tests prüfen die wichtigsten Abläufe: Import mit Rollback, Aggregation mit
+Retouren, Mitarbeiterbewertung, Konfiguration, Prompt-Aufrufe und Speicherung.
+Modellantworten werden mit einfachen Mocks simuliert; die Tests benötigen keinen
+API-Schlüssel. Die fachliche Prüfung erfolgt manuell anhand der gespeicherten
+Ergebnisse und der Originaltranskripte.
