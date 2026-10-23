@@ -15,7 +15,10 @@ dependencies = [
 ofinto = "ofinto.cli:app"
 
 [dependency-groups]
-dev = ["pytest>=8.4"]
+dev = [
+    "pyright>=1.1.414",
+    "pytest>=8.4",
+]
 
 [build-system]
 requires = ["hatchling"]
@@ -27,3 +30,9 @@ packages = ["ofinto"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "--import-mode=importlib"
+
+[tool.pyright]
+include = ["ofinto", "tests", "benchmarks"]
+venvPath = "."
+venv = ".venv"
+typeCheckingMode = "standard"

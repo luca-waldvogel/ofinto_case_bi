@@ -3,6 +3,7 @@ ENRICHMENT_TABLE = "firmendaten_anreicherung"
 ORDERS_TABLE = "bestellungen"
 ORDER_ITEMS_TABLE = "bestellpositionen"
 COMPANY_PROFILES_TABLE = "company_profiles"
+POTENTIAL_TABLE = "company_potential"
 
 
 SCHEMAS = {
@@ -51,4 +52,14 @@ SCHEMAS = {
         "stueckpreis_netto": "DECIMAL(18,2)",
         "waehrung": "VARCHAR",
     },
+}
+
+
+POTENTIAL_SCHEMA = {
+    "bewertbar": "BOOLEAN",
+    "potenzial_min": "BIGINT",
+    "potenzial_max": "BIGINT",
+    "jahresbedarf_min": "BIGINT",
+    "jahresbedarf_max": "BIGINT",
+    "regelversion": "VARCHAR",
 }

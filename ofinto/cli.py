@@ -1,6 +1,5 @@
 import csv
 import logging
-from collections import Counter
 from datetime import date
 from pathlib import Path
 from typing import Annotated
@@ -8,10 +7,13 @@ from typing import Annotated
 import duckdb
 import typer
 
+from .config import PotentialConfig
 from .services.aggregation import DEFAULT_AS_OF
 from .services.aggregation import merge_data
 from .services.extraction import extract_transcripts as extract_signals
+from .services.export import export_potential
 from .services.import_csv import import_data
+from .services.potential import estimate_potential
 
 
 app = typer.Typer(no_args_is_help=True)
@@ -63,7 +65,7 @@ def aggregate(
     database: Annotated[Path, typer.Option("--database", dir_okay=False, resolve_path=True)] = Path("data/case.duckdb"),
     as_of: Annotated[str, typer.Option("--as-of", help="Stichtag im Format YYYY-MM-DD.")] = DEFAULT_AS_OF.isoformat(),
 ) -> None:
-    """Firmen verbinden, Produktmengen aggregieren und Mitarbeiterbasis einordnen."""
+    """Firmen verbinden und Produktmengen aggregieren."""
     try:
         companies = merge_data(database, date.fromisoformat(as_of))
     except (duckdb.Error, OSError, ValueError) as error:
@@ -71,11 +73,61 @@ def aggregate(
         raise typer.Exit(code=1) from error
     typer.secho(f"Aggregation erfolgreich: {database} (Stichtag {as_of})", fg=typer.colors.GREEN)
     typer.echo(f"  company_profiles: {len(companies)} Firmen")
-    for quality, count in Counter(company['mitarbeiterbasis'] for company in companies).items():
-        typer.echo(f"  {quality}: {count}")
-    for company in companies:
-        if company['hinweise']:
-            typer.echo(f"  {company['account_id']} | {company['firmenname']} | {company['mitarbeiterbasis']} | {company['hinweise']}")
+
+
+@app.command("potential")
+def potential(
+    database: Annotated[Path, typer.Option("--database", dir_okay=False, resolve_path=True)] = Path("data/case.duckdb"),
+    as_of: Annotated[str, typer.Option("--as-of", help="Stichtag im Format YYYY-MM-DD.")] = DEFAULT_AS_OF.isoformat(),
+) -> None:
+    """Potenzial seit Erstbestellung berechnen und in DuckDB speichern."""
+    try:
+        config = PotentialConfig()
+        summary = estimate_potential(database, config, date.fromisoformat(as_of))
+        typer.echo(f"Potenzialschätzung: {summary.total} Kunden; "
+                   f"{summary.evaluated} bewertet; {summary.excluded} nicht bewertbar")
+        typer.echo(f"Stichtag: {as_of}; Regelversion {config.rule_version}; Top-Kandidaten: {summary.top_count}")
+    except (duckdb.Error, OSError, ValueError, KeyError) as error:
+        typer.secho(f"Potenzialschätzung fehlgeschlagen: {error}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=1) from error
+
+
+@app.command("export")
+def export(
+    database: Annotated[Path, typer.Option("--database", dir_okay=False, resolve_path=True)] = Path("data/case.duckdb"),
+    output_dir: Annotated[Path, typer.Option("--output-dir", file_okay=False, resolve_path=True)] = Path("data/potential"),
+) -> None:
+    """Gespeicherte Potenziale als CSV exportieren."""
+    try:
+        export_potential(database, output_dir)
+        typer.echo(f"Exporte: {output_dir}")
+        typer.echo("Top 15 | Konto | Firma | Potenzial (Plätze) | Jahresbedarf (Plätze)")
+        with (output_dir / "top15.csv").open(newline="", encoding="utf-8") as source:
+            for row in csv.DictReader(source):
+                typer.echo(f"  {row['rang']} | {row['account_id']} | {row['firmenname']} | "
+                           f"{row['potenzial_min']}–{row['potenzial_max']} | "
+                           f"{row['jahresbedarf_min']}–{row['jahresbedarf_max']}")
+        typer.echo("Nicht seriös bewertbare Kunden | Mitarbeiterbasis | Begründung")
+        with (output_dir / "nicht_bewertbar.csv").open(newline="", encoding="utf-8") as source:
+            for row in csv.DictReader(source):
+                typer.echo(f"  {row['account_id']} | {row['firmenname']} | "
+                           f"{row['mitarbeiterbasis']} | {row['hinweise']}")
+    except (duckdb.Error, OSError, ValueError, csv.Error) as error:
+        typer.secho(f"Export fehlgeschlagen: {error}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=1) from error
+
+
+@app.command("ci")
+@app.command("run")
+def run(
+    database: Annotated[Path, typer.Option("--database", dir_okay=False, resolve_path=True)] = Path("data/case.duckdb"),
+    as_of: Annotated[str, typer.Option("--as-of", help="Stichtag im Format YYYY-MM-DD.")] = DEFAULT_AS_OF.isoformat(),
+    output_dir: Annotated[Path, typer.Option("--output-dir", file_okay=False, resolve_path=True)] = Path("data/potential"),
+) -> None:
+    """aggregate, potential und export nacheinander ausführen."""
+    aggregate(database, as_of)
+    potential(database, as_of)
+    export(database, output_dir)
 
 
 @app.command("extract-transcripts")
