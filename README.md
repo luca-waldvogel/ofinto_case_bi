@@ -232,7 +232,7 @@ Datenmengen aber langsamer als ein Bulk-Import.
 ofinto/
 ├── __main__.py             # python -m ofinto
 ├── cli.py                  # CLI-Befehle und Konsolenausgaben
-├── config.py               # PromptClientConfig und Laden der Umgebungsvariablen
+├── config.py               # Prompt-Konfigurationen und Laden der Umgebungsvariablen
 ├── clients/
 │   └── prompt.py           # Generischer PromptClient und OpenAI-Anbindung
 ├── model/
@@ -240,13 +240,15 @@ ofinto/
 │   └── transcript.py       # Extraktionsmodell und Feldbeschreibungen
 ├── programs/
 │   ├── base.py             # PromptProgram und Standard-Hooks
-│   └── extraction.py       # Extraktionsprompts und fachliche Hooks
+│   ├── extraction.py       # Extraktionsprompts und fachliche Hooks
+│   └── assistant.py        # Text-to-SQL und Antwortprompt
 └── services/
     ├── import_csv.py       # CSV-Import
     ├── aggregation.py      # Firmenprofile und Bestellmengen
     ├── potential.py        # Potenzial berechnen und speichern
     ├── export.py           # Ranking und CSV-Exporte
-    └── extraction.py       # Fireflies einlesen, extrahieren und speichern
+    ├── extraction.py       # Fireflies einlesen, extrahieren und speichern
+    └── assistant.py        # SQL-Abfrage und Antwort mit zwei Prompts
 tests/                      # Tests und CSV-Fixtures
 data/                       # Lokale Eingaben und erzeugte Ergebnisse
 ```
@@ -368,10 +370,50 @@ with PromptClient(ExtractionProgram) as extraction:
     signals = extraction.run(transcript)
 ```
 
-In `ofinto/config.py` definiert `PromptClientConfig` Modell, Timeout, `max_retries`,
-API-Schlüssel, optionalen API-Endpunkt (`base_url`) und die Antwortspeicherung
-(`store`, standardmäßig `False`). Ohne übergebene Konfiguration lädt der Client
-sie über `PromptClientConfig.from_env()` aus Umgebung und `.env`.
+## B2B-Daten fragen (Teil 2)
+
+Der Assistent hat zwei Prompts: Der erste liest das Schema aus DuckDB und erzeugt
+SQL. Die Abfrage läuft direkt auf `data/case.duckdb` in einer read-only Verbindung.
+Ein `try/except` fängt SQL-Fehler ab; es gibt keine Intentliste und keine Prüfung
+der generierten SQL-Struktur. Externe Dateioperationen aus SQL sind ausgeschaltet.
+Höchstens 100 Ergebniszeilen gehen zusammen mit der Frage und dem SQL an den
+zweiten Prompt. Bei Auswahlfragen liefert der SQL-Prompt eine breite
+Kandidatenmenge mit Begründungsdaten; der zweite Prompt wählt daraus die
+gewünschte Anzahl aus. Region, Korrespondenzsprache und Rechnungsland werden
+getrennt behandelt (zum Beispiel Romandie über `region`, nicht über `sprache`
+oder `land_rechnung`). Das Schema enthält kurze Feldbeschreibungen. Für Fragen
+nach Summen, Mittelwerten oder Zeitvergleichen berechnet SQL die Kennzahl und
+gibt sie mit passenden Spaltennamen aus; Geldbeträge werden nach Währung
+getrennt. Der Antwortprompt kennzeichnet solche Werte als berechnet und nennt
+Zeitraum und Währung, soweit sie aus den Ergebnissen hervorgehen.
+
+```sh
+uv run ofinto ci
+uv run ofinto extract-transcripts
+uv run ofinto ask --question "Wie viele Bestellungen gab es 2025 je Währung?"
+# vollständige Antwort, SQL-Abfrage und Ergebnisdaten als JSON
+uv run ofinto ask --question "Wie viele Bestellungen gab es 2025 je Währung?" --details
+```
+
+Standardmäßig gibt `ask` nur den formatierten Antworttext aus. `--details` gibt
+zusätzlich SQL und Ergebnisdaten als JSON aus.
+
+Das Modell erhält bei der SQL-Erzeugung das Datenbankschema, nicht alle Datensätze.
+Nur die benötigten Ergebniszeilen werden im zweiten Prompt übergeben. Bei realen
+Kundendaten müssen beide Modellaufrufe lokal laufen; Frage und Resultate können
+Kundendaten enthalten. Für den erfundenen Case ist die API zulässig.
+
+`evaluate-assistant` kann weiterhin alle 15 Fragen aus `data/testfragen.csv`
+beantworten. SQL-Ergebnisse und Antworten sind mit den gewählten Kennzahlen zu
+prüfen; freies SQL kann syntaktisch korrekt sein und trotzdem fachlich falsch
+rechnen. Gesprächsinhalte stehen nur insoweit zur Verfügung, wie sie in
+`transcript_signals` gespeichert sind.
+
+`ExtractionPromptConfig` und `AssistantPromptConfig` erben die gemeinsamen
+Einstellungen von `PromptClientConfig` (Timeout, Retries, API-Schlüssel und
+Endpunkt). Die Extraktion verwendet `OPENAI_MODEL` (Standard: `gpt-5-mini`),
+der Assistent `OPENAI_ASSISTANT_MODEL` (Standard: `gpt-6.1-sol`). SQL- und
+Antwortprompt erhalten jeweils ein eigenes `AssistantPromptConfig`-Objekt.
 Eine explizite Konfiguration kann so angepasst und übergeben werden:
 
 ```python

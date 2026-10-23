@@ -1,4 +1,5 @@
 import csv
+import json
 import logging
 from datetime import date
 from pathlib import Path
@@ -10,6 +11,7 @@ import typer
 from .config import PotentialConfig
 from .services.aggregation import DEFAULT_AS_OF
 from .services.aggregation import merge_data
+from .services.assistant import answer_question, evaluate_questions
 from .services.extraction import extract_transcripts as extract_signals
 from .services.export import export_potential
 from .services.import_csv import import_data
@@ -117,7 +119,6 @@ def export(
         raise typer.Exit(code=1) from error
 
 
-@app.command("ci")
 @app.command("run")
 def run(
     database: Annotated[Path, typer.Option("--database", dir_okay=False, resolve_path=True)] = Path("data/case.duckdb"),
@@ -146,6 +147,43 @@ def extract_transcripts(
         typer.secho(f"  {call_id}: {error}", fg=typer.colors.RED, err=True)
     if summary.errors:
         raise typer.Exit(code=1)
+
+
+@app.command("ask")
+def ask(
+    question: Annotated[str, typer.Option("--question", help="Frage an die B2B-Daten.")],
+    database: Annotated[Path, typer.Option("--database", dir_okay=False)] = Path("data/case.duckdb"),
+    details: Annotated[
+        bool,
+        typer.Option("--details", help="Zusätzlich SQL-Abfrage und Ergebnisdaten ausgeben."),
+    ] = False,
+) -> None:
+    """Eine Frage beantworten; mit --details auch SQL und Ergebnisdaten ausgeben."""
+    try:
+        result = answer_question(database, question)
+    except (duckdb.Error, OSError, ValueError, RuntimeError) as error:
+        typer.secho(f"Assistent fehlgeschlagen: {error}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=1) from error
+    if details:
+        typer.echo(json.dumps(result.to_dict(), ensure_ascii=False, indent=2, default=str))
+    else:
+        # Direkt ausgeben, damit tatsächliche Zeilenumbrüche lesbar erscheinen.
+        typer.echo(result.answer.replace("\\n", "\n"))
+
+
+@app.command("evaluate-assistant")
+def evaluate_assistant(
+    questions_file: Annotated[Path, typer.Option("--questions-file", exists=True, dir_okay=False)] = Path("data/testfragen.csv"),
+    output_file: Annotated[Path, typer.Option("--output-file", dir_okay=False)] = Path("data/assistant_evaluation.json"),
+    database: Annotated[Path, typer.Option("--database", dir_okay=False)] = Path("data/case.duckdb"),
+) -> None:
+    """Die Case-Fragen über die freie Text-to-SQL-Abfrage auswerten."""
+    try:
+        evaluate_questions(database, questions_file, output_file)
+    except (duckdb.Error, OSError, ValueError, RuntimeError, csv.Error) as error:
+        typer.secho(f"Evaluation fehlgeschlagen: {error}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=1) from error
+    typer.echo(f"Assistenten-Evaluation: {output_file}")
 
 
 if __name__ == "__main__":

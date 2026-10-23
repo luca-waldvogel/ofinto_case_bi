@@ -7,7 +7,7 @@ import duckdb
 
 from ..programs import ExtractionProgram
 from ..clients import PromptClient
-from ..config import PromptClientConfig
+from ..config import ExtractionPromptConfig
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +57,7 @@ def extract_transcripts(
     sources = sorted(transcript_dir.glob("*.txt"))
     if not sources:
         raise ValueError(f"Keine .txt-Transkripte gefunden: {transcript_dir}")
-    config = PromptClientConfig.from_env()
+    config = ExtractionPromptConfig.from_env()
     client = PromptClient(ExtractionProgram, config)
     summary = ExtractionSummary()
     logger.info(f"Extraktion startet: {len(sources)} Dateien; Modell={config.model}")
