@@ -5,31 +5,50 @@ Python ab 3.12 und [uv](https://docs.astral.sh/uv/) werden benötigt.
 ```sh
 uv sync
 uv run ofinto import
-uv run ofinto aggregate
+uv run ofinto ci
 uv run pytest -q
+uv run pyright
 ```
 
-Die Datenbank ist standardmäßig `data/case.duckdb`. Beide Befehle akzeptieren
+Die Datenbank ist standardmäßig `data/case.duckdb`. Die Befehle akzeptieren
 `--database`; der Import zusätzlich `--data-dir`. Nach einem neuen Import
-`aggregate` erneut ausführen. Der Stichtag ist standardmäßig der dokumentierte
-Datenstand 14. Oktober 2026, änderbar mit `--as-of YYYY-MM-DD`.
+`run` (oder `ci`) erneut ausführen. Beide Befehle führen `aggregate`, `potential` und `export`
+nacheinander aus; jeder Schritt kann auch einzeln aufgerufen werden.
+Der Stichtag ist standardmäßig der 14. Oktober 2026 und kann mit
+`--as-of YYYY-MM-DD` geändert werden.
 
 ## Was passiert?
 
 `services/import_csv.py` liest die vier CSV-Dateien mit festgelegten Datentypen ein.
-`merge_data()` in `ofinto/services/aggregation.py` erledigt die gesamte Aggregation:
+`merge_data()` in `ofinto/services/aggregation.py` erstellt die Firmenprofile:
 
 1. Firmenstamm und Anreicherung über `account_id` verbinden. Alle Firmen bleiben
-   enthalten, auch ohne Anreicherung oder Bestellungen. Die bestehende Zuordnung
-   wird übernommen; ein Match-Score unter 0.85 schränkt die Mitarbeiterbasis ein.
-   Name und Ort werden nicht zusätzlich geprüft.
-2. Bestellungen und Tisch-/Bürostuhlmengen je Firma aggregieren. Nur abgeschlossene
-   Bestellungen und Teilretouren bis zum Stichtag zählen. Bestellungen werden
-   getrennt von Positionen gezählt, um Doppelzählungen zu vermeiden.
-3. Mitarbeiterbasis mit wenigen Regeln einordnen und verständliche Hinweise ergänzen.
+   enthalten, auch ohne Anreicherung oder Bestellungen.
+2. Bestellungen und Tisch-/Bürostuhlmengen je Firma bis zum Stichtag aggregieren.
+   Bestellungen werden getrennt von Positionen gezählt.
 
-Das Ergebnis steht in einer einzigen Tabelle `company_profiles` und wird auch
-als Liste von Python-Dictionaries zurückgegeben. Die ursprünglichen deutschen
+Die SQL-Aggregation bewertet dabei auch die Mitarbeiterbasis und ergänzt Hinweise.
+`ofinto potential` berechnet aus diesen bewerteten Profilen das Potenzial.
+`ofinto export` schreibt die gespeicherten Ergebnisse als CSV.
+
+DuckDB übernimmt das Filtern und Aggregieren der großen Bestelltabellen,
+das Verbinden der Quellen und die Qualitätsbewertung in `aggregation.py`.
+Die Potenzialregeln stehen als reine Python-Funktion
+`calculate_potential(company, as_of, config)` in `ofinto/services/potential.py`.
+Die Regelparameter stehen im unveränderlichen `PotentialConfig`-Objekt aus
+`ofinto/config.py`. `estimate_potential` erhält ein `PotentialConfig`-Objekt;
+`calculate_potential` verwendet ohne Angabe die Standardwerte.
+Die Potenzialfunktion lässt sich mit einem einzelnen Firmen-Dictionary ohne
+Datenbank prüfen. Potenzialannahmen stehen in `PotentialConfig`; die
+Qualitätsschwellen stehen direkt in der SQL-Aggregation.
+
+`potential.py` liest die bewerteten Firmenprofile mit `fetchmany(1000)` und
+schreibt die berechneten Ergebnisse blockweise mit `executemany()` in eine
+temporäre DuckDB-Tabelle. Erst nach erfolgreicher Berechnung ersetzt diese die
+Ergebnistabelle. Der Export liegt separat in `services/export.py`.
+
+Die Aggregation speichert `company_profiles` mit Qualitätsbewertung;
+`potential` speichert `company_potential`. Die ursprünglichen deutschen
 Spaltennamen und Quellenwerte bleiben erhalten. Die Aggregation läuft lokal,
 ohne API oder Modell. Die separate Transkriptextraktion ist unten beschrieben.
 
@@ -70,6 +89,143 @@ und Potenzialschätzungen sind nicht Teil dieses Schritts.
 Tests prüfen den bestehenden Import, die korrekte Aggregation mit Retouren und
 die Einordnung der Mitarbeiterbasis einschließlich der Match-Score-Grenze.
 
+## Potenzial schätzen (Teil 1a)
+
+```sh
+uv run ofinto ci --database data/case.duckdb \
+  --as-of 2026-10-14 --output-dir data/potential
+```
+
+`run` und `ci` führen Aggregation mit Qualitätsprüfung, Potenzialschätzung
+und CSV-Export in dieser Reihenfolge aus. `potential` allein liest die bereits bewerteten
+Firmenprofile und speichert `company_potential`; `export` erzeugt danach die
+drei CSV-Dateien aus dieser Tabelle. Der Stichtag muss mit dem der gespeicherten
+Profile übereinstimmen. Keine Transkripte,
+Modellaufrufe oder zusätzlichen Abhängigkeiten werden benötigt. Ohne Optionen
+gelten die im Beispiel gezeigten Werte.
+
+### Rechenregeln und Bedeutung
+
+Für Mitarbeiterzahl `M` und Kundenlaufzeit `J` gelten folgende Annahmen:
+
+| Größe | Untergrenze | Obergrenze |
+|---|---|---|
+| Büroarbeitsplätze `W` | `0,7 × M` | `M` |
+| Von ofinto gelieferte Arbeitsplatzäquivalente `O` | `0,5 × (tische_min + buerostuehle_min)` | `0,5 × (tische_max + buerostuehle_max)` |
+| Zusätzliches Potenzial | `max(0; W_min × J / 10 − O_max)` | `max(0; W_max × J / 10 − O_min)` |
+| Gesamter jährlicher Ersatzbedarf | `W_min / 10` | `W_max / 10` |
+
+`J = min(5; Tage zwischen erste_bestellung und Stichtag / 365)`.
+Angebrochene Jahre zählen anteilig. Maßgeblich ist das Feld `erste_bestellung`
+im Firmenstamm, nicht das früheste Datum aus den Bestellzeilen. Im Case weichen
+diese Angaben bei A-1053 voneinander ab. Bei fehlendem Erstbestelldatum oder einem
+Datum nach dem Stichtag bricht `potential` mit einer Kunden-ID ab; vorherige
+Potenzialergebnisse und Exporte bleiben erhalten. Die Firmenaggregation wurde
+zu diesem Zeitpunkt bereits aktualisiert.
+
+Die 0,7–1,0 Büroarbeitsplätze je Mitarbeiter gelten einheitlich für alle Branchen.
+Ein ofinto-Tisch oder -Arbeitsstuhl deckt einen halben Arbeitsplatz ab: Ein nur
+mit einem dieser Produkte ausgestatteter Platz behält 0,5 Arbeitsplatzäquivalente
+Potenzial. Die Zuordnung von Tisch und Stuhl zu einzelnen Plätzen ist dafür
+nicht erforderlich. Produktzuordnung und Teilretouren kommen aus der Aggregation.
+
+Beispiel mit fest angenommenen 100 Arbeitsplätzen: Nach einem Jahr wären zehn
+Plätze zu ersetzen. Sechs von ofinto gelieferte Arbeitsplatzäquivalente lassen
+vier Plätze rechnerisches Potenzial. Nach fünf Jahren wären es bei 30 gelieferten
+Äquivalenten noch 20. Die echte Berechnung verwendet die Arbeitsplatzbandbreite.
+
+**Grenzen:** Der Ersatzzyklus beträgt zehn Jahre. Der nicht von ofinto gedeckte
+Ersatzbedarf gilt als durch andere Anbieter ausgestattet. Deren Käufe werden
+nicht beobachtet. Die Absatzlücke über die bisherige Kundenbeziehung ist ein
+strukturelles Vergleichsszenario, keine Aussage zu unmittelbar bevorstehenden
+Käufen oder Abschlusswahrscheinlichkeiten. Wachstum, Desk-Sharing und
+branchenspezifische Büroanteile werden nicht gesondert modelliert. Die seit 2022
+gelieferten Möbel gelten als weiterhin genutzt und innerhalb derselben
+Produktgruppe verschiedenen Plätzen zugeordnet; wiederholte Ersatzkäufe und
+ausgemusterte Möbel sind nicht erkennbar. Die Aggregation summiert die gesamte
+vorhandene Bestellhistorie bis zum Stichtag. Bei einer künftigen Datenhistorie
+von mehr als fünf Jahren muss das Mengenfenster auf die maximal fünfjährige
+Vergleichsdauer abgestimmt werden.
+
+### Bewertbarkeit, Ranking und Ausgaben
+
+Nur `mitarbeiterbasis = verwendbar` wird berechnet. `eingeschränkt` und
+`nicht verwendbar` bleiben ohne Potenzialzahl (`NULL`). Die vorhandenen
+`hinweise` werden unverändert übernommen; es gibt keine weitere Qualitätslogik.
+Damit gelten auch bestehende Grenzen der Aggregation, etwa die fehlende
+Sonderbehandlung eines leeren Match-Scores. Ein berechnetes Potenzial von null
+ist dagegen eine gültige Bewertung.
+
+Die Ergebnistabelle und die Exporte enthalten nur Kunden-ID, Firmenname, Mitarbeiterzahl,
+Erstbestellung, Stichtag, Mitarbeiterbasis, Hinweise, Bewertbarkeit,
+`potenzial_min/max`, `jahresbedarf_min/max` und `regelversion = 1`.
+Zwischenwerte und die übrigen Firmenprofildaten werden nicht übernommen.
+Die Ergebnisbandbreiten sind ganze Zahlen: Untergrenzen werden ab-,
+Obergrenzen aufgerundet. Es wird
+kein jährliches Restpotenzial berechnet. Die Bandbreiten sind Szenarien und
+keine statistischen Konfidenzintervalle.
+
+Die Top 15 enthalten ausschließlich bewertbare Kunden mit positiver
+Potenzialobergrenze. Sortiert wird nach gespeicherter Untergrenze absteigend,
+danach Obergrenze absteigend, zuletzt Kunden-ID aufsteigend. Bei weniger als 15
+Kandidaten fällt die Liste entsprechend kürzer aus.
+
+| Datei im Ausgabeordner | Inhalt |
+|---|---|
+| `kundenpotenziale.csv` | Alle Kunden mit den wesentlichen Firmenangaben, Potenzial, Jahresbedarf, Status und Hinweisen |
+| `top15.csv` | Bis zu 15 Kandidaten mit Rang und denselben Angaben |
+| `nicht_bewertbar.csv` | Kunden-ID, Firmenname, Mitarbeiterbasis, unveränderte Hinweise, Stichtag und Regelversion |
+
+Die CSVs sind UTF-8 mit Kopfzeile; fehlende Werte sind leer. Ungerundete
+Berechnungsfelder werden nicht gespeichert.
+Bestehende CSVs werden erst ersetzt, wenn alle
+drei neuen Dateien erfolgreich geschrieben wurden. Die Datenbanktabelle und
+die drei Dateiersetzungen bilden keine gemeinsame Transaktion; bei einem
+Exportfehler meldet die CLI einen Fehler, und der Befehl kann erneut laufen.
+
+Für die Case-Daten zum Standardstichtag entstehen **150 Zeilen: 73 bewertet,
+77 nicht bewertbar**. `potential` zeigt die Zusammenfassung; `export` zeigt
+Top 15 und Ausschlussliste.
+
+### Prüfung und Skalierung
+
+```sh
+uv run pytest -q
+uv run python -m benchmarks.potential --customers 10000 \
+  --orders-per-customer 20 --items-per-order 5
+```
+
+Die Tests decken anteilige Kundenlaufzeiten, Fünfjahresgrenze, halbe
+Arbeitsplatzäquivalente, Teilretouren, unveränderte Qualitätsgründe,
+Ganzzahlintervalle, Rangfolge, Top-15-Grenze und wiederholbare Exporte ab.
+Die Potenzialfunktion wird zusätzlich direkt ohne Datenbank getestet,
+einschließlich exakter Ganzzahlrundung.
+
+Der Lasttest erzeugt temporär **10'000 Kunden, 200'000 Bestellungen und
+eine Million Positionen**, darunter 2'000 nicht bewertbare Kunden. Die Historie
+enthält abgeschlossene Bestellungen, Teilretouren, Vollretouren, Stornos und
+Bestellungen nach dem Stichtag. Tisch- und Arbeitsstuhlpositionen werden neben
+Besprechungsstühlen, Kabinen und Zubehör verarbeitet.
+
+Ein lokaler Lauf mit DuckDB 1.5.6 und Python 3.14.7 ergab:
+
+| Messgröße | Ergebnis |
+|---|---|
+| Datenerzeugung, separat gemessen | 0,279 Sekunden |
+| Aggregation mit Qualität, Potenzial und drei CSV-Exporte | 6,360 Sekunden |
+| Maximaler Speicher des gesamten Prozesses | 237,7 MiB |
+| Datenbankdatei | 9,8 MiB |
+| CSV-Dateien zusammen | Rund 1,6 MB |
+
+Der Benchmark prüft Tabellen- und Exportzeilenzahlen, Intervallgrenzen und
+für eine Firma unabhängig berechnete Mengen sowie Potenziale. Die Größen
+sind über die drei CLI-Optionen veränderbar. Der Speicherwert umfasst auch
+Datenerzeugung und Validierung. Die synthetischen Daten enthalten viele
+Wiederholungen und sind stark komprimierbar; die Messwerte sind keine
+Laufzeitgarantie für reale Bestellhistorien. Hardware, Datenverteilung,
+Textlängen und verfügbare Ressourcen beeinflussen das Ergebnis. `executemany()` ist einfach, bei großen
+Datenmengen aber langsamer als ein Bulk-Import.
+
 ## Projektstruktur
 
 ```text
@@ -87,7 +243,9 @@ ofinto/
 │   └── extraction.py       # Extraktionsprompts und fachliche Hooks
 └── services/
     ├── import_csv.py       # CSV-Import
-    ├── aggregation.py      # Firmenprofile und Mitarbeiterbasis
+    ├── aggregation.py      # Firmenprofile und Bestellmengen
+    ├── potential.py        # Potenzial berechnen und speichern
+    ├── export.py           # Ranking und CSV-Exporte
     └── extraction.py       # Fireflies einlesen, extrahieren und speichern
 tests/                      # Tests und CSV-Fixtures
 data/                       # Lokale Eingaben und erzeugte Ergebnisse
