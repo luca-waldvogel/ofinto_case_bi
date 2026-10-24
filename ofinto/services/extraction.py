@@ -8,6 +8,7 @@ import duckdb
 from ..programs import ExtractionProgram
 from ..clients import PromptClient
 from ..config import ExtractionPromptConfig
+from .export import export_extracted_labels
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +48,7 @@ def read_transcript(source: Path) -> Transcript:
 class ExtractionSummary:
     extracted: int = 0
     errors: dict[str, str] = field(default_factory=dict)
+    csv_path: Path | None = None
 
 
 def extract_signals(
@@ -95,4 +97,5 @@ def extract_signals(
     logger.info(
         f"Extraktion beendet: {summary.extracted} extrahiert, {len(summary.errors)} Fehler"
     )
+    summary.csv_path = export_extracted_labels(database)
     return summary
