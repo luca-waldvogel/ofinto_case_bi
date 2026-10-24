@@ -1,8 +1,11 @@
+import csv
 from pathlib import Path
 
 import duckdb
 import pytest
+from typer.testing import CliRunner
 
+from ofinto.cli import app
 from ofinto.services.import_csv import import_data
 from ofinto.services.aggregation import merge_data
 
@@ -63,3 +66,18 @@ def test_match_score_boundary(database, score, expected):
         connection.execute("UPDATE firmendaten_anreicherung SET match_score = ?", [score])
 
     assert merge_data(database)[0]["mitarbeiterbasis"] == expected
+
+
+def test_aggregate_command_exports_complete_profile(database):
+    result = CliRunner().invoke(app, ["aggregate", "--database", str(database)])
+    assert result.exit_code == 0, result.output
+
+    exported = database.parent / "results" / "aggregate" / "company_profiles.csv"
+    with exported.open(newline="", encoding="utf-8") as source:
+        rows = list(csv.DictReader(source))
+    with duckdb.connect(str(database), read_only=True) as connection:
+        columns = [column[0] for column in connection.execute("SELECT * FROM company_profiles LIMIT 0").description]
+    assert list(rows[0]) == columns
+    assert rows[0]["account_id"] == "A-1"
+    assert rows[0]["letzte_bestellung"] == "2026-01-02"
+    assert str(exported) in result.output

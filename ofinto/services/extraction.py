@@ -49,7 +49,7 @@ class ExtractionSummary:
     errors: dict[str, str] = field(default_factory=dict)
 
 
-def extract_transcripts(
+def extract_signals(
     transcript_dir: Path,
     database: Path,
 ) -> ExtractionSummary:

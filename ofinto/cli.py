@@ -12,8 +12,8 @@ from .config import PotentialConfig
 from .services.aggregation import DEFAULT_AS_OF
 from .services.aggregation import merge_data
 from .services.assistant import answer_question, evaluate_questions
-from .services.extraction import extract_transcripts as extract_signals
-from .services.export import export_potential
+from .services.extraction import extract_signals
+from .services.export import export_aggregate, export_potential
 from .services.import_csv import import_data
 from .services.potential import estimate_potential
 
@@ -67,14 +67,17 @@ def aggregate(
     database: Annotated[Path, typer.Option("--database", dir_okay=False, resolve_path=True)] = Path("data/case.duckdb"),
     as_of: Annotated[str, typer.Option("--as-of", help="Stichtag im Format YYYY-MM-DD.")] = DEFAULT_AS_OF.isoformat(),
 ) -> None:
-    """Firmen verbinden und Produktmengen aggregieren."""
+    """Firmen aggregieren und die Profile als CSV exportieren."""
+    output_path = database.parent / "results" / "aggregate" / "company_profiles.csv"
     try:
         companies = merge_data(database, date.fromisoformat(as_of))
+        export_aggregate(database, output_path)
     except (duckdb.Error, OSError, ValueError) as error:
         typer.secho(f"Aggregation fehlgeschlagen: {error}", fg=typer.colors.RED, err=True)
         raise typer.Exit(code=1) from error
     typer.secho(f"Aggregation erfolgreich: {database} (Stichtag {as_of})", fg=typer.colors.GREEN)
     typer.echo(f"  company_profiles: {len(companies)} Firmen")
+    typer.echo(f"  CSV-Export: {output_path}")
 
 
 @app.command("potential")
@@ -136,13 +139,14 @@ def extract_transcripts(
     transcript_dir: Annotated[Path, typer.Option("--transcript-dir", exists=True, file_okay=False)] = Path("data/transkripte"),
     database: Annotated[Path, typer.Option("--database", dir_okay=False)] = Path("data/case.duckdb"),
 ) -> None:
-    """Die fünf Pflichtsignale extrahieren und separat in DuckDB speichern."""
+    """Gesprächssignale extrahieren, speichern und als CSV exportieren."""
     try:
         summary = extract_signals(transcript_dir, database)
-    except (duckdb.Error, OSError, ValueError) as error:
+    except (duckdb.Error, OSError, ValueError, csv.Error) as error:
         typer.secho(f"Extraktion fehlgeschlagen: {error}", fg=typer.colors.RED, err=True)
         raise typer.Exit(code=1) from error
     typer.echo(f"Extrahiert: {summary.extracted}; Fehler: {len(summary.errors)}")
+    typer.echo(f"CSV-Export: {summary.csv_path}")
     for call_id, error in summary.errors.items():
         typer.secho(f"  {call_id}: {error}", fg=typer.colors.RED, err=True)
     if summary.errors:
