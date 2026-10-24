@@ -97,7 +97,7 @@ def potential(
 @app.command("export")
 def export(
     database: Annotated[Path, typer.Option("--database", dir_okay=False, resolve_path=True)] = Path("data/case.duckdb"),
-    output_dir: Annotated[Path, typer.Option("--output-dir", file_okay=False, resolve_path=True)] = Path("data/potential"),
+    output_dir: Annotated[Path, typer.Option("--output-dir", file_okay=False, resolve_path=True)] = Path("data/results/potential"),
 ) -> None:
     """Gespeicherte Potenziale als CSV exportieren."""
     try:
@@ -174,7 +174,7 @@ def ask(
 @app.command("evaluate-assistant")
 def evaluate_assistant(
     questions_file: Annotated[Path, typer.Option("--questions-file", exists=True, dir_okay=False)] = Path("data/testfragen.csv"),
-    output_file: Annotated[Path, typer.Option("--output-file", dir_okay=False)] = Path("data/assistant_evaluation.json"),
+    output_file: Annotated[Path, typer.Option("--output-file", dir_okay=False)] = Path("data/results/assistant_evaluation.json"),
     database: Annotated[Path, typer.Option("--database", dir_okay=False)] = Path("data/case.duckdb"),
 ) -> None:
     """Die Case-Fragen über die freie Text-to-SQL-Abfrage auswerten."""

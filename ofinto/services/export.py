@@ -1,5 +1,3 @@
-"""Potenzialtabelle als drei CSV-Dateien exportieren."""
-
 from pathlib import Path
 from tempfile import TemporaryDirectory
 

@@ -1,5 +1,3 @@
-"""Lokale, regelbasierte Absatzlücke seit Beginn der Kundenbeziehung."""
-
 from dataclasses import dataclass
 from datetime import date
 from math import ceil, floor
@@ -9,7 +7,7 @@ from typing import Any
 import duckdb
 
 from ..config import PotentialConfig
-from ..model.schemas import COMPANY_PROFILES_TABLE, POTENTIAL_SCHEMA, POTENTIAL_TABLE
+from ..model import COMPANY_PROFILES_TABLE, POTENTIAL_SCHEMA, POTENTIAL_TABLE
 from .aggregation import DEFAULT_AS_OF
 
 BATCH_SIZE = 1000

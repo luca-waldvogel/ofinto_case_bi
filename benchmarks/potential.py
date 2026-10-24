@@ -1,4 +1,4 @@
-"""Lokaler Lasttest: python -m benchmarks.potential (standardmäßig 10 Mio. Positionen)."""
+"""Generierter nicht voll überprüfter lokaler Lasttest: python -m benchmarks.potential (standardmäßig 10 Mio. Positionen)."""
 
 import argparse
 import csv

@@ -4,4 +4,6 @@ from .schemas import ENRICHMENT_TABLE as ENRICHMENT_TABLE
 from .schemas import ORDER_ITEMS_TABLE as ORDER_ITEMS_TABLE
 from .schemas import ORDERS_TABLE as ORDERS_TABLE
 from .schemas import SCHEMAS as SCHEMAS
+from .schemas import POTENTIAL_SCHEMA as POTENTIAL_SCHEMA
+from .schemas import POTENTIAL_TABLE as POTENTIAL_TABLE
 from .transcript import TranscriptSignals as TranscriptSignals

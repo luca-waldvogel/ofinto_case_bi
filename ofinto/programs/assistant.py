@@ -1,5 +1,3 @@
-"""Zwei einfache Prompts: SQL erzeugen und Ergebnis formulieren."""
-
 from .base import PromptProgram
 
 

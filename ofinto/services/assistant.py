@@ -1,5 +1,3 @@
-"""Einfacher Text-to-SQL-Assistent für die lokale DuckDB-Datei."""
-
 from __future__ import annotations
 
 import csv
@@ -14,7 +12,7 @@ import duckdb
 
 from ..clients import PromptClient
 from ..config import AssistantPromptConfig
-from ..programs.assistant import AnswerProgram, SQLProgram
+from ..programs import AnswerProgram, SQLProgram
 
 FIELD_DESCRIPTIONS = {
     "account_id": "Eindeutige Kunden-ID; verbindet Kundendaten, Bestellungen und Profile.",
@@ -67,11 +65,12 @@ def database_schema(database: Path) -> tuple[str, str | None]:
     """Tabellen und Spalten sowie, falls vorhanden, den Datenstichtag lesen."""
     if not database.is_file():
         raise ValueError(f"Datenbank fehlt: {database}")
+    
     with duckdb.connect(str(database), read_only=True) as con:
         tables = [row[0] for row in con.execute("SHOW TABLES").fetchall()]
         lines = []
         for table in tables:
-            quoted = '"' + table.replace('"', '""') + '"'
+            quoted = '"' + table.replace('"', '""') + '"' # TODO: WHY?
             columns = con.execute(f"DESCRIBE {quoted}").fetchall()
             fields = ", ".join(
                 f"{name} {kind}"
@@ -105,6 +104,7 @@ def answer_question(database: Path, question: str) -> AssistantAnswer:
     sql_config = AssistantPromptConfig.from_env()
     with PromptClient(SQLProgram, sql_config) as client:
         sql = client.run(f"{schema}\n\nFrage: {question}")
+
     error = None
     try:
         result = execute_sql(database, sql)
@@ -113,6 +113,7 @@ def answer_question(database: Path, question: str) -> AssistantAnswer:
         result = []
         error = f"{type(exception).__name__}: {exception}"
         execution = {"sql_fehler": error, "zeilen": []}
+
     response_input = json.dumps({
         "frage": question,
         "datenstichtag": data_as_of,
@@ -122,6 +123,7 @@ def answer_question(database: Path, question: str) -> AssistantAnswer:
     answer_config = AssistantPromptConfig.from_env()
     with PromptClient(AnswerProgram, answer_config) as client:
         answer = client.run(response_input)
+
     return AssistantAnswer(answer, sql, result, data_as_of, error)
 
 
