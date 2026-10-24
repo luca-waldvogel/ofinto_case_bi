@@ -86,15 +86,17 @@ def database_schema(database: Path) -> tuple[str, str | None]:
     return "\n".join(lines), data_as_of
 
 
-def execute_sql(database: Path, sql: str) -> list[dict[str, Any]]:
-    """Die modellgenerierte Abfrage direkt read-only ausführen und maximal 100 Zeilen lesen."""
+def execute_sql(database: Path, sql: str) -> tuple[list[dict[str, Any]], bool]:
+    """Bis zu 100 Ergebniszeilen lesen und einen möglichen Überlauf erkennen."""
     with duckdb.connect(str(database), read_only=True) as con:
         # Verhindert Dateizugriffe aus SQL; es gibt keine eigene SQL-Prüfschicht.
         con.execute("SET enable_external_access = false")
         result = con.execute(sql)
         columns = [item[0] for item in result.description or []]
-        return [dict(zip(columns, (_value(value) for value in row)))
-                for row in result.fetchmany(100)]
+        fetched = result.fetchmany(101)
+        rows = [dict(zip(columns, (_value(value) for value in row)))
+                for row in fetched[:100]]
+        return rows, len(fetched) > 100
 
 
 def answer_question(database: Path, question: str) -> AssistantAnswer:
@@ -107,8 +109,8 @@ def answer_question(database: Path, question: str) -> AssistantAnswer:
 
     error = None
     try:
-        result = execute_sql(database, sql)
-        execution = {"zeilen": result, "abgeschnitten": len(result) == 100}
+        result, truncated = execute_sql(database, sql)
+        execution = {"zeilen": result, "abgeschnitten": truncated}
     except Exception as exception:
         result = []
         error = f"{type(exception).__name__}: {exception}"
