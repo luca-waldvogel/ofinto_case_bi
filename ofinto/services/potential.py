@@ -13,7 +13,7 @@ from .aggregation import DEFAULT_AS_OF
 BATCH_SIZE = 1000
 PROFILE_COLUMNS = (
     "account_id", "firmenname", "mitarbeitende", "erste_bestellung",
-    "stichtag", "mitarbeiterbasis", "hinweise",
+    "letzte_bestellung", "stichtag", "mitarbeiterbasis", "hinweise",
 )
 
 
@@ -35,7 +35,7 @@ def calculate_potential(
     employees: int | None = company["mitarbeitende"]
     if employees is None:
         raise ValueError(f"Mitarbeiterzahl fehlt für bewertbares Profil: {company['account_id']}")
-    years = min(config.max_observation_years, (as_of - first_order).days / config.days_per_year)
+    years = (as_of - first_order).days / config.days_per_year
     supplied_min = config.workplace_share_per_item * (company["tische_min"] + company["buerostuehle_min"])
     supplied_max = config.workplace_share_per_item * (company["tische_max"] + company["buerostuehle_max"])
     workplaces_min = config.workplaces_per_employee_min * employees

@@ -26,7 +26,7 @@ Mit `--details` zeigt `ask` zusätzlich die erzeugte SQL-Abfrage und ihre Ergebn
 ## Vorgehen
 
 1. **Aggregieren:** Kunden, Firmendaten und wirksame Bestellungen werden über die Kunden-ID verbunden. Stornos und vollständige Retouren zählen bei den gelieferten Möbelmengen nicht; Teilretouren führen zu Mengenbandbreiten. Unzuverlässige Mitarbeiterzahlen werden mit einem Hinweis gekennzeichnet.
-2. **Potenzial schätzen:** Aus der Mitarbeiterzahl werden 70–100 % Büroarbeitsplätze angenommen. Bei einem zehnjährigen Ersatzzyklus wird der erwartete Bedarf während der bisherigen Kundenbeziehung, höchstens fünf Jahre, mit den von ofinto gelieferten Tisch- und Stuhlmengen verglichen. Potenzial und Jahresbedarf werden als Bandbreiten ausgewiesen.
+2. **Potenzial schätzen:** Aus der Mitarbeiterzahl werden 70–100 % Büroarbeitsplätze angenommen. Bei einem zehnjährigen Ersatzzyklus wird der erwartete Bedarf während der bisherigen Kundenbeziehung mit den von ofinto gelieferten Tisch- und Stuhlmengen verglichen. Potenzial und Jahresbedarf werden als Bandbreiten ausgewiesen.
 3. **Gespräche auswerten:** Ein Modell ermittelt Gesprächsart, Kaufzeitpunkt, Arbeitsplätze, Wettbewerber und Einwände aus den Transkripten. Die Ergebnisse werden in DuckDB gespeichert und als CSV exportiert.
 4. **Fragen stellen:** Der Assistent erzeugt eine SQL-Abfrage, liest die Datenbank nur lesend und formuliert aus den Ergebniszeilen eine Antwort. Berechnete Zahlen sollten anhand der SQL-Abfrage und der Quelldaten geprüft werden.
 

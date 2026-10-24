@@ -18,8 +18,8 @@ DEFAULT_AS_OF = date(2026, 10, 14)
 WORKPLACE_CHAIRS = ["Motion", "Era"]
 
 
-def merge_data(database: Path, as_of: date = DEFAULT_AS_OF) -> list[dict]:
-    """Ein Firmenprofil je Konto erstellen und als company_profiles speichern.
+def merge_data(database: Path, as_of: date = DEFAULT_AS_OF) -> int:
+    """Firmenprofile speichern und ihre Anzahl zurückgeben.
 
     Die account_id bestimmt die Zuordnung. Teilretouren liefern Mengenbereiche,
     weil unbekannt ist, welche Positionen zurückgegeben wurden.
@@ -95,6 +95,7 @@ def merge_data(database: Path, as_of: date = DEFAULT_AS_OF) -> list[dict]:
                 ) AS hinweise
             FROM companies CROSS JOIN (SELECT ?::DATE AS stichtag)
         """, [as_of, WORKPLACE_CHAIRS, WORKPLACE_CHAIRS, as_of])
-        result = connection.execute(f'SELECT * FROM "{COMPANY_PROFILES_TABLE}" ORDER BY account_id')
-        columns = [column[0] for column in result.description]
-        return [dict(zip(columns, row)) for row in result.fetchall()]
+        row = connection.execute(
+            f'SELECT count(*) FROM "{COMPANY_PROFILES_TABLE}"'
+        ).fetchone()
+        return row[0] if row else 0

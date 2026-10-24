@@ -70,13 +70,13 @@ def aggregate(
     """Firmen aggregieren und die Profile als CSV exportieren."""
     output_path = database.parent / "results" / "aggregate" / "company_profiles.csv"
     try:
-        companies = merge_data(database, date.fromisoformat(as_of))
+        company_count = merge_data(database, date.fromisoformat(as_of))
         export_aggregate(database, output_path)
     except (duckdb.Error, OSError, ValueError) as error:
         typer.secho(f"Aggregation fehlgeschlagen: {error}", fg=typer.colors.RED, err=True)
         raise typer.Exit(code=1) from error
     typer.secho(f"Aggregation erfolgreich: {database} (Stichtag {as_of})", fg=typer.colors.GREEN)
-    typer.echo(f"  company_profiles: {len(companies)} Firmen")
+    typer.echo(f"  company_profiles: {company_count} Firmen")
     typer.echo(f"  CSV-Export: {output_path}")
 
 

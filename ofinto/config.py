@@ -9,12 +9,11 @@ from dotenv import dotenv_values
 
 @dataclass(frozen=True)
 class PotentialConfig:
-    rule_version: str = "1"
+    rule_version: str = "2"
     workplaces_per_employee_min: Decimal = Decimal("0.7")
     workplaces_per_employee_max: Decimal = Decimal("1.0")
     workplace_share_per_item: Decimal = Decimal("0.5")
     replacement_years: int = 10
-    max_observation_years: int = 5
     days_per_year: int = 365
 
 
