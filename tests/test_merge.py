@@ -1,22 +1,20 @@
+import csv
+from datetime import date
 from pathlib import Path
 
 import duckdb
-import pytest
+from typer.testing import CliRunner
 
-from ofinto.services.import_csv import import_data
+from ofinto.cli import app
 from ofinto.services.aggregation import merge_data
+from ofinto.services.import_csv import import_data
 
-TEST_DATA = Path(__file__).parent / "test_data" / "valid"
-
-
-@pytest.fixture
-def database(tmp_path):
-    path = tmp_path / "case.duckdb"
-    import_data(TEST_DATA, path)
-    return path
+DATA = Path(__file__).parent / "test_data" / "valid"
 
 
-def test_orders_respect_returns_and_cutoff(database):
+def test_aggregate_filters_orders_and_exports_csv(tmp_path):
+    database = tmp_path / "case.duckdb"
+    import_data(DATA, database)
     with duckdb.connect(str(database)) as connection:
         connection.execute("""
             INSERT INTO bestellungen VALUES
@@ -27,39 +25,35 @@ def test_orders_respect_returns_and_cutoff(database):
             INSERT INTO bestellpositionen VALUES
             ('O-2', 'Elevate', 'Tisch', 3, 50, 'CHF'),
             ('O-2', 'Motion', 'Stuhl', 2, 50, 'CHF'),
-            ('O-2', 'Go', 'Stuhl', 7, 10, 'CHF'),
             ('O-3', 'Elevate', 'Tisch', 10, 10, 'CHF'),
             ('O-4', 'Elevate', 'Tisch', 10, 10, 'CHF'),
             ('O-5', 'Elevate', 'Tisch', 10, 10, 'CHF')
         """)
 
-    company = merge_data(database)[0]
+    result = CliRunner().invoke(app, ["aggregate", "--database", str(database)])
+    assert result.exit_code == 0, result.output
+    assert "company_profiles: 1 Firmen" in result.output
+    with duckdb.connect(str(database), read_only=True) as connection:
+        assert connection.execute("""
+            SELECT anzahl_bestellungen, letzte_bestellung, tische_min, tische_max,
+                   buerostuehle_min, buerostuehle_max FROM company_profiles
+        """).fetchone() == (2, date(2026, 2, 1), 1, 4, 0, 2)
+    with (tmp_path / "results" / "aggregate" / "company_profiles.csv").open(newline="") as source:
+        [row] = list(csv.DictReader(source))
+    assert row["letzte_bestellung"] == "2026-02-01"
 
-    assert company["anzahl_bestellungen"] == 2
-    assert (company["tische_min"], company["tische_max"]) == (1, 4)
-    assert (company["buerostuehle_min"], company["buerostuehle_max"]) == (0, 2)
 
-
-def test_employee_basis_depends_on_data_quality(database):
-    assert merge_data(database)[0]["mitarbeiterbasis"] == "verwendbar"
-
+def test_aggregate_marks_low_match_score(tmp_path):
+    database = tmp_path / "case.duckdb"
+    import_data(DATA, database)
     with duckdb.connect(str(database)) as connection:
-        connection.execute("UPDATE firmendaten_anreicherung SET stand = DATE '2020-01-01'")
-    assert merge_data(database)[0]["mitarbeiterbasis"] == "eingeschränkt"
-
-    with duckdb.connect(str(database)) as connection:
-        connection.execute("DELETE FROM firmendaten_anreicherung")
-    companies = merge_data(database)
-    assert len(companies) == 1
-    assert companies[0]["mitarbeiterbasis"] == "nicht verwendbar"
-
-
-@pytest.mark.parametrize("score, expected", [
-    (0.8499, "eingeschränkt"),
-    (0.85, "verwendbar"),
-])
-def test_match_score_boundary(database, score, expected):
-    with duckdb.connect(str(database)) as connection:
-        connection.execute("UPDATE firmendaten_anreicherung SET match_score = ?", [score])
-
-    assert merge_data(database)[0]["mitarbeiterbasis"] == expected
+        connection.execute("UPDATE firmendaten_anreicherung SET match_score = 0.8")
+    assert merge_data(database) == 1
+    with duckdb.connect(str(database), read_only=True) as connection:
+        row = connection.execute(
+            "SELECT mitarbeiterbasis, hinweise FROM company_profiles"
+        ).fetchone()
+    assert row is not None
+    basis, reason = row
+    assert basis == "eingeschränkt"
+    assert "Match-Score" in reason

@@ -1,20 +1,19 @@
 import os
-from dataclasses import dataclass
-from dataclasses import field
+from dataclasses import dataclass, field
 from decimal import Decimal
 from pathlib import Path
+from typing import ClassVar
 
 from dotenv import dotenv_values
 
 
 @dataclass(frozen=True)
 class PotentialConfig:
-    rule_version: str = "1"
+    rule_version: str = "2"
     workplaces_per_employee_min: Decimal = Decimal("0.7")
     workplaces_per_employee_max: Decimal = Decimal("1.0")
     workplace_share_per_item: Decimal = Decimal("0.5")
     replacement_years: int = 10
-    max_observation_years: int = 5
     days_per_year: int = 365
 
 
@@ -26,15 +25,23 @@ class PromptClientConfig:
     api_key: str | None = field(default=None, repr=False)
     base_url: str | None = None
     store: bool = False
+    model_env: ClassVar[str] = "OPENAI_MODEL"
 
     @classmethod
     def from_env(cls) -> "PromptClientConfig":
         values = {**dotenv_values(Path.cwd() / ".env"), **os.environ}
-        defaults = cls()
         return cls(
-            model=values.get("OPENAI_MODEL") or defaults.model,
-            timeout=float(values.get("OPENAI_TIMEOUT") or defaults.timeout),
-            max_retries=int(values.get("OPENAI_MAX_RETRIES") or defaults.max_retries),
             api_key=values.get("OPENAI_API_KEY"),
             base_url=values.get("OPENAI_BASE_URL") or None,
         )
+
+
+@dataclass(frozen=True)
+class ExtractionPromptConfig(PromptClientConfig):
+    """Konfiguration für die Transkriptextraktion."""
+
+
+@dataclass(frozen=True)
+class AssistantPromptConfig(PromptClientConfig):
+    """Konfiguration für SQL- und Antwortprompts des Assistenten."""
+    model: str = "gpt-6.1-sol"

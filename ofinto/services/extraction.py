@@ -7,7 +7,8 @@ import duckdb
 
 from ..programs import ExtractionProgram
 from ..clients import PromptClient
-from ..config import PromptClientConfig
+from ..config import ExtractionPromptConfig
+from .export import export_extracted_labels
 
 logger = logging.getLogger(__name__)
 
@@ -47,9 +48,10 @@ def read_transcript(source: Path) -> Transcript:
 class ExtractionSummary:
     extracted: int = 0
     errors: dict[str, str] = field(default_factory=dict)
+    csv_path: Path | None = None
 
 
-def extract_transcripts(
+def extract_signals(
     transcript_dir: Path,
     database: Path,
 ) -> ExtractionSummary:
@@ -57,7 +59,7 @@ def extract_transcripts(
     sources = sorted(transcript_dir.glob("*.txt"))
     if not sources:
         raise ValueError(f"Keine .txt-Transkripte gefunden: {transcript_dir}")
-    config = PromptClientConfig.from_env()
+    config = ExtractionPromptConfig.from_env()
     client = PromptClient(ExtractionProgram, config)
     summary = ExtractionSummary()
     logger.info(f"Extraktion startet: {len(sources)} Dateien; Modell={config.model}")
@@ -95,4 +97,5 @@ def extract_transcripts(
     logger.info(
         f"Extraktion beendet: {summary.extracted} extrahiert, {len(summary.errors)} Fehler"
     )
+    summary.csv_path = export_extracted_labels(database)
     return summary
