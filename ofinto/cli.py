@@ -9,8 +9,7 @@ import duckdb
 import typer
 
 from .config import PotentialConfig
-from .services.aggregation import DEFAULT_AS_OF
-from .services.aggregation import merge_data
+from .services.aggregation import DEFAULT_AS_OF, merge_data
 from .services.assistant import answer_question, evaluate_questions
 from .services.extraction import extract_signals
 from .services.export import export_aggregate, export_potential
@@ -18,12 +17,14 @@ from .services.import_csv import import_data
 from .services.potential import estimate_potential
 
 
-app = typer.Typer(no_args_is_help=True)
+app = typer.Typer(
+    no_args_is_help=True,
+    help="ofinto BI: lokale Daten importieren und analysieren.",
+)
 
 
 @app.callback()
-def main() -> None:
-    """ofinto BI: lokale Daten importieren und analysieren."""
+def setup_logging() -> None:
     logging.basicConfig(level=logging.WARNING, format="%(levelname)s %(message)s")
     logging.getLogger("ofinto").setLevel(logging.INFO)
     logging.getLogger("openai._base_client").setLevel(logging.INFO)
@@ -171,7 +172,6 @@ def ask(
     if details:
         typer.echo(json.dumps(result.to_dict(), ensure_ascii=False, indent=2, default=str))
     else:
-        # Direkt ausgeben, damit tatsächliche Zeilenumbrüche lesbar erscheinen.
         typer.echo(result.answer.replace("\\n", "\n"))
 
 

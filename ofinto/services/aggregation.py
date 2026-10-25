@@ -72,7 +72,7 @@ def merge_data(database: Path, as_of: date = DEFAULT_AS_OF) -> int:
                     WHEN mitarbeitende IS NULL OR mitarbeitende <= 0
                         OR mitarbeitende_bezug IS DISTINCT FROM 'Standort'
                         THEN 'nicht verwendbar'
-                    WHEN match_score < 0.85 THEN 'eingeschränkt'
+                    WHEN match_score IS NULL OR match_score < 0.85 THEN 'eingeschränkt'
                     WHEN stand IS NULL OR stand < stichtag - INTERVAL '2 years'
                         OR stand > stichtag THEN 'eingeschränkt'
                     ELSE 'verwendbar'
@@ -84,7 +84,8 @@ def merge_data(database: Path, as_of: date = DEFAULT_AS_OF) -> int:
                         THEN 'Mitarbeiterzahl bezieht sich auf den Konzern'
                         WHEN mitarbeitende_bezug IS DISTINCT FROM 'Standort'
                         THEN 'Bezug der Mitarbeiterzahl ist unklar' END,
-                    CASE WHEN match_score < 0.85
+                    CASE WHEN match_score IS NULL THEN 'Match-Score fehlt'
+                        WHEN match_score < 0.85
                         THEN 'Unsichere Firmenzuordnung: Match-Score unter 0.85' END,
                     CASE WHEN stand IS NULL THEN 'Aktualisierungsdatum fehlt'
                         WHEN stand < stichtag - INTERVAL '2 years'
