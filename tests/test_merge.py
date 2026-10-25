@@ -3,6 +3,7 @@ from datetime import date
 from pathlib import Path
 
 import duckdb
+import pytest
 from typer.testing import CliRunner
 
 from ofinto.cli import app
@@ -43,11 +44,15 @@ def test_aggregate_filters_orders_and_exports_csv(tmp_path):
     assert row["letzte_bestellung"] == "2026-02-01"
 
 
-def test_aggregate_marks_low_match_score(tmp_path):
+@pytest.mark.parametrize(("score", "expected_hint"), [
+    (0.8, "Match-Score unter 0.85"),
+    (None, "Match-Score fehlt"),
+])
+def test_aggregate_marks_missing_or_low_match_score(tmp_path, score, expected_hint):
     database = tmp_path / "case.duckdb"
     import_data(DATA, database)
     with duckdb.connect(str(database)) as connection:
-        connection.execute("UPDATE firmendaten_anreicherung SET match_score = 0.8")
+        connection.execute("UPDATE firmendaten_anreicherung SET match_score = ?", [score])
     assert merge_data(database) == 1
     with duckdb.connect(str(database), read_only=True) as connection:
         row = connection.execute(
@@ -56,4 +61,4 @@ def test_aggregate_marks_low_match_score(tmp_path):
     assert row is not None
     basis, reason = row
     assert basis == "eingeschränkt"
-    assert "Match-Score" in reason
+    assert expected_hint in reason
