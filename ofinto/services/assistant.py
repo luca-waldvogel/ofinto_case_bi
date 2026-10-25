@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import csv
 import json
 from dataclasses import asdict, dataclass
@@ -70,8 +68,7 @@ def database_schema(database: Path) -> tuple[str, str | None]:
         tables = [row[0] for row in con.execute("SHOW TABLES").fetchall()]
         lines = []
         for table in tables:
-            quoted = '"' + table.replace('"', '""') + '"' # TODO: WHY?
-            columns = con.execute(f"DESCRIBE {quoted}").fetchall()
+            columns = con.execute(f'DESCRIBE "{table}"').fetchall()
             fields = ", ".join(
                 f"{name} {kind}"
                 + (f" -- {FIELD_DESCRIPTIONS[name]}" if name in FIELD_DESCRIPTIONS else "")

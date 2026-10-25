@@ -24,10 +24,10 @@ class PromptClient(Generic[InputT, OutputT]):
     def __init__(
         self,
         program: type[PromptProgram[InputT, OutputT]],
-        config: PromptClientConfig | None = None,
+        config: PromptClientConfig,
     ) -> None:
         self.program = program()
-        self.config = config if config is not None else PromptClientConfig.from_env()
+        self.config = config
         result_type = self.program.return_type
         if result_type is not str and not (
             isinstance(result_type, type) and issubclass(result_type, BaseModel)
