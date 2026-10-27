@@ -106,18 +106,7 @@ def export(
     """Gespeicherte Potenziale als CSV exportieren."""
     try:
         export_potential(database, output_dir)
-        typer.echo(f"Exporte: {output_dir}")
-        typer.echo("Top 15 | Konto | Firma | Potenzial (Plätze) | Jahresbedarf (Plätze)")
-        with (output_dir / "top15.csv").open(newline="", encoding="utf-8") as source:
-            for row in csv.DictReader(source):
-                typer.echo(f"  {row['rang']} | {row['account_id']} | {row['firmenname']} | "
-                           f"{row['potenzial_min']}–{row['potenzial_max']} | "
-                           f"{row['jahresbedarf_min']}–{row['jahresbedarf_max']}")
-        typer.echo("Nicht seriös bewertbare Kunden | Mitarbeiterbasis | Begründung")
-        with (output_dir / "nicht_bewertbar.csv").open(newline="", encoding="utf-8") as source:
-            for row in csv.DictReader(source):
-                typer.echo(f"  {row['account_id']} | {row['firmenname']} | "
-                           f"{row['mitarbeiterbasis']} | {row['hinweise']}")
+        typer.echo(f"Exporte erfolgreich: {output_dir}")
     except (duckdb.Error, OSError, ValueError, csv.Error) as error:
         typer.secho(f"Export fehlgeschlagen: {error}", fg=typer.colors.RED, err=True)
         raise typer.Exit(code=1) from error
